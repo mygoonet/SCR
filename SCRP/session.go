@@ -3,6 +3,7 @@ package SCRP
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -12,6 +13,7 @@ type Session struct {
 	cfg    Config
 	ctx    context.Context
 	cancel context.CancelFunc
+	mu     sync.Mutex
 	state  State
 	notes  []DeliveryNote
 }
@@ -29,7 +31,14 @@ func (s *Session) Open() error {
 	return nil
 }
 
+func (s *Session) Ctx() context.Context {
+	return s.ctx
+}
+
 func (s *Session) Run() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.state == StateClosed {
 		return fmt.Errorf("session closed, call Open() first")
 	}
