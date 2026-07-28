@@ -1,0 +1,7 @@
+.idea/
+.idea/**/*
+.proxyai/
+tmp/
+scraper/
+SCR
+SCR.iml
