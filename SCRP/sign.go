@@ -4,47 +4,199 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/chromedp/chromedp"
 )
 
+func OpenWaybillSidePage(ctx context.Context, number string) error {
+	err := chromedp.Run(ctx, chromedp.Tasks{
+		chromedp.Sleep(1 * time.Second),
+		waitForItems(),
+		clickWaybill(number),
+		chromedp.Sleep(2 * time.Second),
+		waitForSidePage(),
+		chromedp.Sleep(1 * time.Second),
+	})
+	return err
+}
+
+func waitForItems() chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		for i := 0; i < 30; i++ {
+			var n int
+			if err := chromedp.Evaluate(
+				`document.querySelectorAll('[data-tid="ListItem"]').length`, &n).Do(ctx); err != nil {
+				return err
+			}
+			if n > 0 {
+				return nil
+			}
+			chromedp.Sleep(1 * time.Second).Do(ctx)
+		}
+		return fmt.Errorf("no ListItems found on page")
+	}
+}
+
+func clickWaybill(number string) chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		var result string
+		if err := chromedp.Evaluate(fmt.Sprintf(
+			`(function(num){
+			var items = document.querySelectorAll('[data-tid="ListItem"]');
+			for(var i=0;i<items.length;i++){
+				var numEl = items[i].querySelector('[data-tid="WaybillNumber"]');
+				if(numEl && numEl.textContent.trim() === num){
+					items[i].click();
+					return JSON.stringify({ok: true});
+				}
+			}
+			return JSON.stringify({err: 'not found'});
+		})(%q)`, number), &result).Do(ctx); err != nil {
+			return err
+		}
+		var r struct {
+			Ok  bool   `json:"ok"`
+			Err string `json:"err"`
+		}
+		json.Unmarshal([]byte(result), &r)
+		if r.Err != "" {
+			return fmt.Errorf("waybill %q not found", number)
+		}
+		return nil
+	}
+}
+
+func waitForSidePage() chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		for i := 0; i < 30; i++ {
+			var hasSide bool
+			if err := chromedp.Evaluate(
+				`document.querySelector('[data-tid="SidePage__root"]') !== null`, &hasSide).Do(ctx); err != nil {
+				return err
+			}
+			if hasSide {
+				return nil
+			}
+			chromedp.Sleep(1 * time.Second).Do(ctx)
+		}
+		var text string
+		chromedp.Evaluate(`document.body.innerText.substring(0, 1000)`, &text).Do(ctx)
+		return fmt.Errorf("side page did not appear. text: %q", text)
+	}
+}
+
+func clickPopupMenu() chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		var result string
+		if err := chromedp.Evaluate(`(function(){
+			var btn = document.querySelector('button[aria-controls*="Popup"]');
+			if(btn){
+				btn.click();
+				return JSON.stringify({ok: true, source: 'global'});
+			}
+			var sp = document.querySelector('[data-tid="SidePage__root"]');
+			if(sp){
+				btn = sp.querySelector('button[aria-controls*="Popup"]');
+				if(btn){
+					btn.click();
+					return JSON.stringify({ok: true, source: 'sidepage'});
+				}
+			}
+			return JSON.stringify({ok: false});
+		})()`, &result).Do(ctx); err != nil {
+			return err
+		}
+		var r struct {
+			Ok     bool   `json:"ok"`
+			Source string `json:"source"`
+		}
+		json.Unmarshal([]byte(result), &r)
+		if !r.Ok {
+			return fmt.Errorf("popup menu button (aria-controls*=Popup) not found — waybill may not be in signable state")
+		}
+		return nil
+	}
+}
+
+func waitForPopup() chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		for i := 0; i < 20; i++ {
+			var found bool
+			if err := chromedp.Evaluate(`(function(){
+				var items = document.querySelectorAll('[role="menuitem"], [data-tid*="MenuItem"], [data-tid*="Popup"] *');
+				if(items.length > 0) return true;
+				var popup = document.querySelector('[role="menu"], [role="listbox"], [data-tid*="Popup__"]');
+				return popup !== null;
+			})()`, &found).Do(ctx); err != nil {
+				return err
+			}
+			if found {
+				return nil
+			}
+			chromedp.Sleep(500 * time.Millisecond).Do(ctx)
+		}
+		return fmt.Errorf("popup menu did not appear after clicking trigger button")
+	}
+}
+
+func clickPopupOption(text string) chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		var result string
+		if err := chromedp.Evaluate(fmt.Sprintf(`(function(t){
+			var all = document.querySelectorAll('[role="menuitem"], [role="option"], [data-tid*="MenuItem"], [data-tid*="Popup"] *, li');
+			for(var i=0;i<all.length;i++){
+				if(all[i].textContent.trim().indexOf(t) !== -1){
+					all[i].click();
+					return JSON.stringify({ok: true, tag: all[i].tagName});
+				}
+			}
+			var any = document.querySelectorAll('*');
+			for(var i=0;i<any.length;i++){
+				if(any[i].textContent.trim() === t){
+					var el = any[i];
+					while(el && el.tagName !== 'BUTTON' && el.tagName !== 'A' && el.tagName !== 'LI'){
+						el = el.parentElement;
+					}
+					if(el){
+						el.click();
+						return JSON.stringify({ok: true, tag: el.tagName, via: 'walkup'});
+					}
+				}
+			}
+			return JSON.stringify({ok: false});
+		})(%q)`, text), &result).Do(ctx); err != nil {
+			return err
+		}
+		var r struct {
+			Ok  bool   `json:"ok"`
+			Tag string `json:"tag"`
+		}
+		json.Unmarshal([]byte(result), &r)
+		if !r.Ok {
+			return fmt.Errorf("popup option %q not found", text)
+		}
+		return nil
+	}
+}
+
 func SignDeliveryNote(ctx context.Context, number string) error {
-	fmt.Println("=== SIGN: set viewport ===")
-	if err := chromedp.Run(ctx, chromedp.EmulateViewport(1920, 1080)); err != nil {
-		return fmt.Errorf("set viewport: %w", err)
+	if err := OpenWaybillSidePage(ctx, number); err != nil {
+		return fmt.Errorf("open waybill: %w", err)
 	}
 
-	fmt.Println("=== SIGN: navigate to login ===")
-	if err := NavigateToLogin(ctx); err != nil {
-		return fmt.Errorf("navigate to login: %w", err)
-	}
-	fmt.Println("=== SIGN: navigate to carrier ===")
-	if err := NavigateToCarrier(ctx); err != nil {
-		return fmt.Errorf("navigate to carrier: %w", err)
+	if err := chromedp.Run(ctx, clickPopupMenu()); err != nil {
+		return fmt.Errorf("open popup menu: %w", err)
 	}
 
-	fmt.Println("=== SIGN: open three-dot menu ===")
-	if err := openThreeDotMenu(ctx, number); err != nil {
-		return fmt.Errorf("open menu: %w", err)
-	}
+	chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
 
-	fmt.Println("=== SIGN: click 'Подписать без подписи водителя' ===")
-	if err := ClickElement(ctx, "Подписать без подписи водителя"); err != nil {
-		return fmt.Errorf("click sign without driver: %w", err)
+	if err := chromedp.Run(ctx, clickPopupOption("Подписать без подписи водителя")); err != nil {
+		return fmt.Errorf("click sign option: %w", err)
 	}
 
 	chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
-	fmt.Println("=== SIGN: click 'Подписать' in footer ===")
-	if err := chromedp.Run(ctx,
-		chromedp.Click(`[data-tid="SidePageFooter__root"] [data-tid="Button__rootElement"]`, chromedp.ByQuery),
-		chromedp.Sleep(3*time.Second),
-	); err != nil {
-		return fmt.Errorf("click sign in footer: %w", err)
-	}
 
-	fmt.Println("=== SIGN: select certificate ===")
 	var posResult string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`
 		(function(){
@@ -77,7 +229,6 @@ func SignDeliveryNote(ctx context.Context, number string) error {
 		return fmt.Errorf("click certificate: %w", err)
 	}
 
-	fmt.Println("=== SIGN: click 'Выбрать' ===")
 	var choosePos string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`
 		(function(){
@@ -106,14 +257,6 @@ func SignDeliveryNote(ctx context.Context, number string) error {
 		return fmt.Errorf("click choose: %w", err)
 	}
 
-	var pageText string
-	chromedp.Run(ctx, chromedp.Evaluate(
-		`document.body.innerText.substring(0, 5000)`, &pageText))
-	fmt.Println("=== PAGE AFTER CERT CHOOSE ===")
-	fmt.Println(pageText)
-	fmt.Println("=")
-
-	fmt.Println("=== SIGN: select power of attorney ===")
 	var poaResult string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`
 		(function(){
@@ -139,40 +282,5 @@ func SignDeliveryNote(ctx context.Context, number string) error {
 		return fmt.Errorf("click continue: %w", err)
 	}
 
-	fmt.Println("=== SIGN: signing completed ===")
 	return chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
-}
-
-func openThreeDotMenu(ctx context.Context, number string) error {
-	if err := chromedp.Run(ctx, chromedp.WaitVisible(`table`, chromedp.ByQuery), chromedp.Sleep(3*time.Second)); err != nil {
-		return fmt.Errorf("wait for table: %w", err)
-	}
-
-	fmt.Println("=== THREE-DOT: searching for waybill", number, "===")
-	var result string
-	err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(
-		`(function(num){
-		var rows = document.querySelectorAll('table tbody tr');
-		for(var i=0;i<rows.length;i++){
-			var cells = rows[i].querySelectorAll('td');
-			for(var j=0;j<cells.length;j++){
-				if(cells[j].textContent.indexOf(num) >= 0){
-					var btn = rows[i].querySelector('[data-tid="Button__rootElement"]');
-					if(!btn) return JSON.stringify({err:'no Button__rootElement'});
-					btn.setAttribute('aria-expanded', 'true');
-					btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
-					return JSON.stringify({ok: true});
-				}
-			}
-		}
-		return JSON.stringify({err: 'not found'});
-	})(%q)`, number), &result))
-	if err != nil {
-		return err
-	}
-	fmt.Println("=== THREE-DOT: result:", result, "===")
-	if !strings.Contains(result, `"ok"`) {
-		return fmt.Errorf("openThreeDotMenu: %s", result)
-	}
-	return chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
 }

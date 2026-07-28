@@ -35,6 +35,10 @@ func (s *Session) Ctx() context.Context {
 	return s.ctx
 }
 
+func (s *Session) Cfg() Config {
+	return s.cfg
+}
+
 func (s *Session) Run() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,11 +82,25 @@ func (s *Session) Run() error {
 	return nil
 }
 
-func dismissCookieBanner(ctx context.Context) {
+func DismissCookieBanner(ctx context.Context) {
 	if ElementExists(ctx, "Понятно") {
 		ClickElement(ctx, "Понятно")
 		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
 	}
+}
+
+func LoginIfNeeded(ctx context.Context, certUser string) (bool, error) {
+	if !ElementExists(ctx, "Сертификат") {
+		return false, nil
+	}
+	if err := Login(ctx, certUser); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func dismissCookieBanner(ctx context.Context) {
+	DismissCookieBanner(ctx)
 }
 
 func (s *Session) DeliveryNotes() []DeliveryNote {

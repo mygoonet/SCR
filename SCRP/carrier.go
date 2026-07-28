@@ -3,19 +3,52 @@ package SCRP
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/chromedp/chromedp"
 )
 
 func NavigateToCarrier(ctx context.Context) error {
-	if err := ClickElement(ctx, "Перевозчик"); err != nil {
-		return fmt.Errorf("click Перевозчик: %w", err)
+	var url string
+	chromedp.Run(ctx, chromedp.Location(&url))
+
+	if strings.Contains(url, "/carrier/") {
+		return nil
 	}
-	return chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
+
+	var result string
+	err := chromedp.Run(ctx, chromedp.Evaluate(`
+		(function(){
+			var btns = document.querySelectorAll('[data-tid="OrgItemRoleButton"] button');
+			for(var i=0;i<btns.length;i++){
+				if(btns[i].textContent.trim() === 'Перевозчик'){
+					btns[i].click();
+					return 'clicked';
+				}
+			}
+			return 'not found';
+		})()`, &result))
+	if err != nil {
+		return fmt.Errorf("eval click: %w", err)
+	}
+	if result != "clicked" {
+		return fmt.Errorf("Перевозчик button not found")
+	}
+
+	return chromedp.Run(ctx,
+		chromedp.Sleep(2*time.Second),
+		chromedp.WaitVisible(`[data-tid="ListItem"]`, chromedp.ByQuery),
+		chromedp.Sleep(1*time.Second),
+	)
 }
 
 func ParseDeliveryNotes(ctx context.Context) ([]DeliveryNote, error) {
+	chromedp.Run(ctx,
+		chromedp.Sleep(2*time.Second),
+		chromedp.WaitVisible(`[data-tid="ListItem"]`, chromedp.ByQuery),
+	)
+
 	var data []DeliveryNote
 	err := chromedp.Run(ctx, chromedp.Evaluate(`(function(){
 		var result = [];

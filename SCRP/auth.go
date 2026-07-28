@@ -9,11 +9,24 @@ import (
 )
 
 func NavigateToLogin(ctx context.Context) error {
-	return chromedp.Run(ctx,
+	if err := chromedp.Run(ctx,
 		chromedp.Navigate("https://logist.kontur.ru/box-selection"),
 		chromedp.WaitReady(`body`),
-		chromedp.Sleep(3*time.Second),
-	)
+		chromedp.Sleep(5*time.Second),
+	); err != nil {
+		return err
+	}
+
+	for i := 0; i < 20; i++ {
+		var textLen int
+		chromedp.Run(ctx, chromedp.Evaluate(`document.body.innerText.length`, &textLen))
+		if textLen > 200 {
+			break
+		}
+		chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
+	}
+
+	return nil
 }
 
 func Login(ctx context.Context, certUser string) error {
