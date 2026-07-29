@@ -38,6 +38,7 @@ func buildChromeOpts(cfg Config) []chromedp.ExecAllocatorOption {
 		chromedp.Flag("password-store", "basic"),
 		chromedp.Flag("use-mock-keychain", true),
 		chromedp.Flag("disable-features", "Translate"),
+		chromedp.Flag("window-size", "1920,1080"),
 		chromedp.Flag("user-data-dir", cfg.UserDataDir),
 	}
 }

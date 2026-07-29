@@ -3,12 +3,15 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"os"
 
 	"SCR/SCRP"
+
+	"github.com/chromedp/chromedp"
 )
 
 func main() {
-	target := "000008517"
+	target := "000008517" // номер накладной для подписания — меняй здесь
 
 	s := SCRP.New(SCRP.Config{
 		UserDataDir: "/home/visa/.config/chromium-gost-scrp",
@@ -42,9 +45,27 @@ func main() {
 		log.Println("Уже залогинены, пропускаем авторизацию")
 	}
 
+	// Скриншот после входа
+	var buf []byte
+	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 90)); err == nil {
+		os.WriteFile("/tmp/opencode/after_login.png", buf, 0644)
+		log.Println("Скриншот после входа сохранён: /tmp/opencode/after_login.png")
+	}
+
+	var currentURL string
+	chromedp.Run(ctx, chromedp.Location(&currentURL))
+	log.Printf("Текущий URL после входа: %s", currentURL)
+
 	// Шаг 4: перейти в раздел Перевозчика
 	if err := SCRP.NavigateToCarrier(ctx); err != nil {
 		log.Fatal("carrier:", err)
+	}
+
+	// Скриншот после выбора перевозчика
+	var buf2 []byte
+	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf2, 90)); err == nil {
+		os.WriteFile("/tmp/opencode/after_carrier.png", buf2, 0644)
+		log.Println("Скриншот после выбора перевозчика: /tmp/opencode/after_carrier.png")
 	}
 
 	// Шаг 5: получить список накладных
@@ -57,7 +78,7 @@ func main() {
 
 	// Шаг 6: подписать накладную
 	log.Printf("Пробуем подписать накладную %s...", target)
-	if err := SCRP.SignDeliveryNote(ctx, target); err != nil {
+	if err := SCRP.SignDeliveryNote(ctx, target, s.Cfg().CertUser); err != nil {
 		log.Fatal("sign:", err)
 	}
 	log.Println("Подписание завершено успешно!")

@@ -9,278 +9,154 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-func OpenWaybillSidePage(ctx context.Context, number string) error {
-	err := chromedp.Run(ctx, chromedp.Tasks{
-		chromedp.Sleep(1 * time.Second),
-		waitForItems(),
-		clickWaybill(number),
-		chromedp.Sleep(2 * time.Second),
-		waitForSidePage(),
-		chromedp.Sleep(1 * time.Second),
-	})
-	return err
-}
-
-func waitForItems() chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		for i := 0; i < 30; i++ {
-			var n int
-			if err := chromedp.Evaluate(
-				`document.querySelectorAll('[data-tid="ListItem"]').length`, &n).Do(ctx); err != nil {
-				return err
-			}
-			if n > 0 {
-				return nil
-			}
-			chromedp.Sleep(1 * time.Second).Do(ctx)
-		}
-		return fmt.Errorf("no ListItems found on page")
-	}
-}
-
-func clickWaybill(number string) chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		var result string
-		if err := chromedp.Evaluate(fmt.Sprintf(
-			`(function(num){
-			var items = document.querySelectorAll('[data-tid="ListItem"]');
-			for(var i=0;i<items.length;i++){
-				var numEl = items[i].querySelector('[data-tid="WaybillNumber"]');
-				if(numEl && numEl.textContent.trim() === num){
-					items[i].click();
-					return JSON.stringify({ok: true});
-				}
-			}
-			return JSON.stringify({err: 'not found'});
-		})(%q)`, number), &result).Do(ctx); err != nil {
-			return err
-		}
-		var r struct {
-			Ok  bool   `json:"ok"`
-			Err string `json:"err"`
-		}
-		json.Unmarshal([]byte(result), &r)
-		if r.Err != "" {
-			return fmt.Errorf("waybill %q not found", number)
-		}
-		return nil
-	}
-}
-
-func waitForSidePage() chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		for i := 0; i < 30; i++ {
-			var hasSide bool
-			if err := chromedp.Evaluate(
-				`document.querySelector('[data-tid="SidePage__root"]') !== null`, &hasSide).Do(ctx); err != nil {
-				return err
-			}
-			if hasSide {
-				return nil
-			}
-			chromedp.Sleep(1 * time.Second).Do(ctx)
-		}
-		var text string
-		chromedp.Evaluate(`document.body.innerText.substring(0, 1000)`, &text).Do(ctx)
-		return fmt.Errorf("side page did not appear. text: %q", text)
-	}
-}
-
-func clickPopupMenu() chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		var result string
-		if err := chromedp.Evaluate(`(function(){
-			var btn = document.querySelector('button[aria-controls*="Popup"]');
-			if(btn){
-				btn.click();
-				return JSON.stringify({ok: true, source: 'global'});
-			}
-			var sp = document.querySelector('[data-tid="SidePage__root"]');
-			if(sp){
-				btn = sp.querySelector('button[aria-controls*="Popup"]');
-				if(btn){
-					btn.click();
-					return JSON.stringify({ok: true, source: 'sidepage'});
-				}
-			}
-			return JSON.stringify({ok: false});
-		})()`, &result).Do(ctx); err != nil {
-			return err
-		}
-		var r struct {
-			Ok     bool   `json:"ok"`
-			Source string `json:"source"`
-		}
-		json.Unmarshal([]byte(result), &r)
-		if !r.Ok {
-			return fmt.Errorf("popup menu button (aria-controls*=Popup) not found — waybill may not be in signable state")
-		}
-		return nil
-	}
-}
-
-func waitForPopup() chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		for i := 0; i < 20; i++ {
-			var found bool
-			if err := chromedp.Evaluate(`(function(){
-				var items = document.querySelectorAll('[role="menuitem"], [data-tid*="MenuItem"], [data-tid*="Popup"] *');
-				if(items.length > 0) return true;
-				var popup = document.querySelector('[role="menu"], [role="listbox"], [data-tid*="Popup__"]');
-				return popup !== null;
-			})()`, &found).Do(ctx); err != nil {
-				return err
-			}
-			if found {
-				return nil
-			}
-			chromedp.Sleep(500 * time.Millisecond).Do(ctx)
-		}
-		return fmt.Errorf("popup menu did not appear after clicking trigger button")
-	}
-}
-
-func clickPopupOption(text string) chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		var result string
-		if err := chromedp.Evaluate(fmt.Sprintf(`(function(t){
-			var all = document.querySelectorAll('[role="menuitem"], [role="option"], [data-tid*="MenuItem"], [data-tid*="Popup"] *, li');
-			for(var i=0;i<all.length;i++){
-				if(all[i].textContent.trim().indexOf(t) !== -1){
-					all[i].click();
-					return JSON.stringify({ok: true, tag: all[i].tagName});
-				}
-			}
-			var any = document.querySelectorAll('*');
-			for(var i=0;i<any.length;i++){
-				if(any[i].textContent.trim() === t){
-					var el = any[i];
-					while(el && el.tagName !== 'BUTTON' && el.tagName !== 'A' && el.tagName !== 'LI'){
-						el = el.parentElement;
-					}
-					if(el){
-						el.click();
-						return JSON.stringify({ok: true, tag: el.tagName, via: 'walkup'});
-					}
-				}
-			}
-			return JSON.stringify({ok: false});
-		})(%q)`, text), &result).Do(ctx); err != nil {
-			return err
-		}
-		var r struct {
-			Ok  bool   `json:"ok"`
-			Tag string `json:"tag"`
-		}
-		json.Unmarshal([]byte(result), &r)
-		if !r.Ok {
-			return fmt.Errorf("popup option %q not found", text)
-		}
-		return nil
-	}
-}
-
-func SignDeliveryNote(ctx context.Context, number string) error {
-	if err := OpenWaybillSidePage(ctx, number); err != nil {
-		return fmt.Errorf("open waybill: %w", err)
-	}
-
-	if err := chromedp.Run(ctx, clickPopupMenu()); err != nil {
-		return fmt.Errorf("open popup menu: %w", err)
-	}
-
-	chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
-
-	if err := chromedp.Run(ctx, clickPopupOption("Подписать без подписи водителя")); err != nil {
-		return fmt.Errorf("click sign option: %w", err)
-	}
-
-	chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
-
-	var posResult string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(`
-		(function(){
-		var certs = document.querySelectorAll('[data-tid^="certificate_"]');
-		for(var i=0;i<certs.length;i++){
-			if(certs[i].textContent.includes("Сичкарук")){
-				var r = certs[i].getBoundingClientRect();
-				return JSON.stringify({cx: r.left + r.width/2, cy: r.top + r.height/2, ok: true});
-			}
-		}
-		return JSON.stringify({ok: false});
-	})()`, &posResult)); err != nil {
+// clickAtCenter ищет элемент JS-выражением (должно вернуть элемент или null)
+// и кликает по его центру реальной мышью — React-меню Контура не реагирует
+// на синтетический el.click().
+func clickAtCenter(ctx context.Context, findJS string) error {
+	var posJSON string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(){
+		var el = %s;
+		if(!el) return JSON.stringify({ok:false});
+		var r = el.getBoundingClientRect();
+		if(r.width === 0 || r.height === 0) return JSON.stringify({ok:false});
+		return JSON.stringify({ok:true, cx:r.left+r.width/2, cy:r.top+r.height/2});
+	})()`, findJS), &posJSON)); err != nil {
 		return err
 	}
-
 	var pos struct {
 		Ok bool    `json:"ok"`
 		CX float64 `json:"cx"`
 		CY float64 `json:"cy"`
 	}
-	json.Unmarshal([]byte(posResult), &pos)
+	json.Unmarshal([]byte(posJSON), &pos)
 	if !pos.Ok {
-		return fmt.Errorf("certificate not found in modal")
+		return fmt.Errorf("element not found or invisible: %s", findJS)
 	}
+	return chromedp.Run(ctx, chromedp.MouseClickXY(pos.CX, pos.CY))
+}
 
-	if err := chromedp.Run(ctx,
-		chromedp.MouseClickXY(pos.CX, pos.CY),
-		chromedp.Sleep(1*time.Second),
-	); err != nil {
-		return fmt.Errorf("click certificate: %w", err)
+// waitForJS ждёт, пока JS-условие станет true.
+func waitForJS(ctx context.Context, js string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		var ok bool
+		if err := chromedp.Run(ctx, chromedp.Evaluate(js, &ok)); err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
 	}
+	return fmt.Errorf("timeout %s waiting for: %s", timeout, js)
+}
 
-	var choosePos string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(`
-		(function(){
-		var btn = document.querySelector('[data-tid="ModalFooter__root"] [data-tid="Button__rootElement"]');
-		if(!btn) return JSON.stringify({ok: false, err: 'no button'});
-		var r = btn.getBoundingClientRect();
-		return JSON.stringify({ok: true, cx: r.left + r.width/2, cy: r.top + r.height/2});
-	})()`, &choosePos)); err != nil {
-		return err
-	}
-
-	var choose struct {
-		Ok bool    `json:"ok"`
-		CX float64 `json:"cx"`
-		CY float64 `json:"cy"`
-	}
-	json.Unmarshal([]byte(choosePos), &choose)
-	if !choose.Ok {
-		return fmt.Errorf("choose button not found")
-	}
-
-	if err := chromedp.Run(ctx,
-		chromedp.MouseClickXY(choose.CX, choose.CY),
-		chromedp.Sleep(5*time.Second),
-	); err != nil {
-		return fmt.Errorf("click choose: %w", err)
-	}
-
-	var poaResult string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(`
-		(function(){
-		var all = document.querySelectorAll('*');
-		var t = 'ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ СТРОИТЕЛЬНАЯ КОМПАНИЯ "ВОСТОКСПЕЦСТРОЙ';
-		for(var i=0;i<all.length;i++){
-			if(all[i].textContent.includes(t)){
-				all[i].click();
-				return 'clicked';
+// openRowMenu открывает меню "три точки" в строке накладной с номером number.
+func openRowMenu(ctx context.Context, number string) error {
+	var res string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(num){
+		var rows = document.querySelectorAll('[data-tid="TableRow"]');
+		for(var i=0;i<rows.length;i++){
+			var numEl = rows[i].querySelector('[data-tid="WaybillNumber"]');
+			if(numEl && numEl.textContent.trim() === num){
+				var btn = rows[i].querySelector('[data-tid="RowActionsButton"] button[aria-controls*="Popup"], [data-tid="RowActionsButton"] button');
+				if(!btn) return 'no menu button';
+				btn.click();
+				return 'ok';
 			}
 		}
 		return 'not found';
-	})()`, &poaResult)); err != nil {
+	})(%q)`, number), &res)); err != nil {
 		return err
 	}
-	if poaResult != "clicked" {
-		return fmt.Errorf("click power of attorney: %s", poaResult)
+	if res != "ok" {
+		return fmt.Errorf("waybill %q: %s", number, res)
+	}
+	return nil
+}
+
+// SignDeliveryNote подписывает накладную с номером number из списка
+// "Документы на подпись" сертификатом certUser.
+func SignDeliveryNote(ctx context.Context, number, certUser string) error {
+	if err := waitForTableRows(ctx); err != nil {
+		return err
 	}
 
-	chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+	// 1. Меню "три точки" в строке накладной
+	if err := openRowMenu(ctx, number); err != nil {
+		return fmt.Errorf("open row menu: %w", err)
+	}
 
-	if err := ClickElement(ctx, "Продолжить"); err != nil {
+	// 2. Пункт "Подписать без подписи водителя"
+	signItemJS := `document.querySelector('[data-tid="Popup__root"] [data-tid="SignWithoutDriverSignature"]') !== null`
+	if err := waitForJS(ctx, signItemJS, 10*time.Second); err != nil {
+		return fmt.Errorf("sign menu item: %w", err)
+	}
+	if err := clickAtCenter(ctx, `document.querySelector('[data-tid="SignWithoutDriverSignature"]')`); err != nil {
+		return fmt.Errorf("click sign item: %w", err)
+	}
+
+	// 3. SidePage "Подписание накладной" -> кнопка "Подписать" в футере
+	sidePageJS := `document.querySelector('[data-tid="SidePageFooter__root"] [data-tid="Sign"]') !== null`
+	if err := waitForJS(ctx, sidePageJS, 15*time.Second); err != nil {
+		return fmt.Errorf("sign side page: %w", err)
+	}
+	signBtnJS := `(function(){
+		var f = document.querySelector('[data-tid="SidePageFooter__root"]');
+		if(!f) return null;
+		var s = f.querySelector('[data-tid="Sign"]');
+		return s ? (s.tagName === 'BUTTON' ? s : (s.querySelector('button') || s)) : null;
+	})()`
+	if err := clickAtCenter(ctx, signBtnJS); err != nil {
+		return fmt.Errorf("click Sign: %w", err)
+	}
+
+	// 4. Модалка "Выбор сертификата" -> клик по сертификату пользователя -> "Выбрать"
+	if err := waitForJS(ctx, `document.querySelector('[data-tid^="certificate_"]') !== null`, 30*time.Second); err != nil {
+		return fmt.Errorf("certificate modal: %w", err)
+	}
+	certJS := fmt.Sprintf(`(function(user){
+		var certs = document.querySelectorAll('[data-tid^="certificate_"]');
+		for(var i=0;i<certs.length;i++){
+			if(certs[i].textContent.indexOf(user) !== -1) return certs[i];
+		}
+		return null;
+	})(%q)`, certUser)
+	if err := clickAtCenter(ctx, certJS); err != nil {
+		return fmt.Errorf("click certificate: %w", err)
+	}
+	chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
+	chooseJS := `(function(){
+		var c = document.querySelector('[data-tid="ModalFooter__root"] [data-tid="Choose"], [data-tid="Choose"]');
+		return c ? (c.tagName === 'BUTTON' ? c : (c.querySelector('button') || c)) : null;
+	})()`
+	if err := clickAtCenter(ctx, chooseJS); err != nil {
+		return fmt.Errorf("click Choose: %w", err)
+	}
+
+	// 5. Модалка "Выбор доверенности" -> доверенность -> "Продолжить"
+	if err := waitForJS(ctx, `document.querySelector('[data-tid="representative-poa-list-item"]') !== null`, 30*time.Second); err != nil {
+		return fmt.Errorf("poa modal: %w", err)
+	}
+	if err := clickAtCenter(ctx, `document.querySelector('[data-tid="representative-poa-list-item"]')`); err != nil {
+		return fmt.Errorf("click poa: %w", err)
+	}
+	chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
+	continueJS := `(function(){
+		var b = document.querySelector('[data-tid="continue-with-poa-button"]');
+		return b ? (b.tagName === 'BUTTON' ? b : (b.querySelector('button') || b)) : null;
+	})()`
+	if err := clickAtCenter(ctx, continueJS); err != nil {
 		return fmt.Errorf("click continue: %w", err)
 	}
 
-	return chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
+	// 6. Ждём закрытия модалки — подписание выполняется криптоплагином
+	if err := waitForJS(ctx,
+		`document.querySelector('[data-tid*="Modal"][data-tid*="root"], [role="dialog"]') === null`,
+		90*time.Second); err != nil {
+		return fmt.Errorf("signing did not finish: %w", err)
+	}
+
+	chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
+	return nil
 }

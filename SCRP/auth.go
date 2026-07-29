@@ -3,6 +3,7 @@ package SCRP
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -30,6 +31,13 @@ func NavigateToLogin(ctx context.Context) error {
 }
 
 func Login(ctx context.Context, certUser string) error {
+	DismissCookieBanner(ctx)
+
+	var buf []byte
+	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 90)); err == nil {
+		os.WriteFile("/tmp/opencode/auth_page.png", buf, 0644)
+	}
+
 	if err := ClickElement(ctx, "Сертификат"); err != nil {
 		return fmt.Errorf("click Сертификат: %w", err)
 	}
@@ -40,6 +48,11 @@ func Login(ctx context.Context, certUser string) error {
 		chromedp.Sleep(5*time.Second),
 	); err != nil {
 		return fmt.Errorf("wait auth page: %w", err)
+	}
+
+	var buf2 []byte
+	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf2, 90)); err == nil {
+		os.WriteFile("/tmp/opencode/after_cert_click.png", buf2, 0644)
 	}
 
 	if err := ClickElement(ctx, certUser); err != nil {
