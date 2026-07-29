@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	target := "000008517" // номер накладной для подписания — меняй здесь
+	target := "000008515" // номер накладной для подписания — меняй здесь
 
 	s := SCRP.New(SCRP.Config{
 		UserDataDir: "/home/visa/.config/chromium-gost-scrp",
