@@ -40,7 +40,18 @@ func (sc *Scraper) Start() error {
 
 	log.Println("Scraper запущен. Тикер 50с: вывод + автоподпись всех")
 
-	ticker := time.NewTicker(50 * time.Second)
+	// Сразу получаем накладные при старте
+	notes, err := sc.fetchNotes(ctx)
+	if err != nil {
+		log.Printf("Ошибка получения накладных: %v", err)
+	} else {
+		log.Printf("Накладные (%d):", len(notes))
+		for _, n := range notes {
+			log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
+		}
+	}
+
+	ticker := time.NewTicker(300 * time.Second)
 	defer ticker.Stop()
 
 	for {

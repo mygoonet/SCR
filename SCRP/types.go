@@ -1,5 +1,7 @@
 package SCRP
 
+import "os"
+
 type DeliveryNote struct {
 	Number           string `json:"number"`
 	Date             string `json:"date"`
@@ -18,6 +20,14 @@ type Config struct {
 	UserDataDir string
 	ChromePath  string
 	CertUser    string
+}
+
+func ConfigFromEnv() Config {
+	return Config{
+		UserDataDir: os.Getenv("USER_DATA_DIR"),
+		ChromePath:  os.Getenv("CHROME_PATH"),
+		CertUser:    os.Getenv("CERT_USER"),
+	}
 }
 
 type State int

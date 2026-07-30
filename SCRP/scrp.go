@@ -12,11 +12,7 @@ func Run() {
 
 	target := "000008515" // номер накладной для подписания — меняй здесь
 
-	s := New(Config{
-		UserDataDir: "/home/visa/.config/chromium-gost-scrp",
-		ChromePath:  "/usr/bin/chromium-gost-stable",
-		CertUser:    "Сичкарук Евгений Александрович",
-	})
+	s := New(ConfigFromEnv())
 
 	if err := s.Open(); err != nil {
 		log.Fatal(err)
