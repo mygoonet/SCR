@@ -1,9 +1,8 @@
 package main
 
 import (
-	"log"
-
 	"SCR/SCRP"
+	"log"
 )
 
 func main() {
@@ -32,7 +31,7 @@ func main() {
 	}()
 
 	// Команды: подпись + запрос списка
-	/*go func() {
+	/*	go func() {
 		time.Sleep(30 * time.Second)
 
 		log.Println(">>> Отправка на подпись: 000008514")
@@ -59,7 +58,7 @@ func main() {
 
 		scraper.SignAll()
 
-	}() */
+	}()*/
 
 	// Даем время на обработку
 	select {}

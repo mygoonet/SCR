@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 )
 
 // Scraper — обёртка над Session для периодического опроса и подписания накладных.
@@ -51,7 +54,7 @@ func (sc *Scraper) Start() error {
 		}
 	}
 
-	ticker := time.NewTicker(300 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -84,14 +87,13 @@ func (sc *Scraper) Start() error {
 					log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
 				}
 
-				log.Printf(">>> SignAll: подписываю %d накладных", len(notes))
-				go func() {
-					if err := sc.signAllInCtx(ctx); err != nil {
+				if len(notes) > 0 {
+					if err := sc.signAll(notes); err != nil {
 						log.Printf(">>> SignAll ошибка: %v", err)
 					} else {
 						log.Println(">>> SignAll завершено")
 					}
-				}()
+				}
 			}
 		}
 	}
@@ -110,17 +112,61 @@ func (sc *Scraper) signAllInCtx(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("получить список: %w", err)
 	}
+	return sc.signAll(notes)
+}
 
+var skipNumbers = map[string]bool{
+	"000000420": true,
+}
+
+func (sc *Scraper) signAll(notes []DeliveryNote) error {
+	ctx := sc.session.Ctx()
+	cert := sc.session.Cfg().CertUser
 	var firstErr error
 	for _, n := range notes {
-		log.Printf(">>> SignAll: подписываю %s...", n.Number)
-		if err := SignDeliveryNote(ctx, n.Number, sc.session.Cfg().CertUser); err != nil {
-			log.Printf(">>> Ошибка подписания %s: %v", n.Number, err)
-			if firstErr == nil {
-				firstErr = err
+		if skipNumbers[n.Number] {
+			log.Printf(">>> SignAll: пропускаю %s (тестовая)", n.Number)
+			continue
+		}
+		signed := false
+		for attempt := 1; attempt <= 3; attempt++ {
+			log.Printf(">>> SignAll: подписываю %s (попытка %d)...", n.Number, attempt)
+			if err := SignDeliveryNote(ctx, n.Number, cert); err != nil {
+				log.Printf(">>> Ошибка подписания %s: %v", n.Number, err)
+				if firstErr == nil {
+					firstErr = err
+				}
+				closePopups(ctx)
+				reloadNoCache(ctx)
+				waitForTableRows(ctx)
+				continue
 			}
-		} else {
-			log.Printf(">>> Накладная %s подписана", n.Number)
+			log.Printf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
+			closePopups(ctx)
+			chromedp.Run(ctx, chromedp.Sleep(5*time.Second))
+			reloadNoCache(ctx)
+			waitForTableRows(ctx)
+			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
+			refreshed, err := sc.fetchNotes(ctx)
+			if err != nil {
+				log.Printf(">>> Ошибка обновления списка: %v", err)
+				break
+			}
+			still := false
+			for _, r := range refreshed {
+				if r.Number == n.Number {
+					still = true
+					break
+				}
+			}
+			if !still {
+				signed = true
+				break
+			}
+			log.Printf(">>> Накладная %s ещё в списке, повторяю...", n.Number)
+		}
+		if !signed {
+			log.Printf(">>> Накладная %s не подписана после 3 попыток", n.Number)
 		}
 	}
 	return firstErr
@@ -175,13 +221,38 @@ func (sc *Scraper) initSession(ctx context.Context) error {
 	return nil
 }
 
+func closePopups(ctx context.Context) {
+	for i := 0; i < 3; i++ {
+		chromedp.Run(ctx, chromedp.KeyEvent("\x1b"))
+		chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
+	}
+	chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+}
+
+func reloadNoCache(ctx context.Context) {
+	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return network.SetCacheDisabled(true).Do(ctx)
+	}))
+	chromedp.Run(ctx, chromedp.Reload())
+	chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
+	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return network.SetCacheDisabled(false).Do(ctx)
+	}))
+}
+
 func (sc *Scraper) fetchNotes(ctx context.Context) ([]DeliveryNote, error) {
 	notes, err := ParseDeliveryNotes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
 	}
+	var filtered []DeliveryNote
+	for _, n := range notes {
+		if n.Number != "" {
+			filtered = append(filtered, n)
+		}
+	}
 	sc.session.mu.Lock()
-	sc.session.notes = notes
+	sc.session.notes = filtered
 	sc.session.mu.Unlock()
-	return notes, nil
+	return filtered, nil
 }

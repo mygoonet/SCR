@@ -3,6 +3,7 @@ package SCRP
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -58,7 +59,11 @@ func ParseDeliveryNotes(ctx context.Context) ([]DeliveryNote, error) {
 	if err := waitForTableRows(ctx); err != nil {
 		return nil, err
 	}
-	chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+
+	var rowCount int
+	chromedp.Run(ctx, chromedp.Evaluate(
+		`document.querySelectorAll('[data-tid="TableRow"]').length`, &rowCount))
+	log.Printf("ParseDeliveryRows: TableRowcount = %d", rowCount)
 
 	var data []DeliveryNote
 	err := chromedp.Run(ctx, chromedp.Evaluate(`(function(){
@@ -91,5 +96,8 @@ func ParseDeliveryNotes(ctx context.Context) ([]DeliveryNote, error) {
 		});
 		return result;
 	})()`, &data))
+	if err != nil {
+		log.Printf("ParseDeliveryNotes Evaluate error: %v", err)
+	}
 	return data, err
 }
