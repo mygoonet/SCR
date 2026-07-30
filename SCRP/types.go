@@ -30,29 +30,4 @@ func ConfigFromEnv() Config {
 	}
 }
 
-type State int
 
-const (
-	StateClosed State = iota
-	StateOpen
-	StateLoggedOut
-	StateLoggedIn
-	StateError
-)
-
-func (s State) String() string {
-	switch s {
-	case StateClosed:
-		return "closed"
-	case StateOpen:
-		return "open"
-	case StateLoggedOut:
-		return "logged_out"
-	case StateLoggedIn:
-		return "logged_in"
-	case StateError:
-		return "error"
-	default:
-		return "unknown"
-	}
-}

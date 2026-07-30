@@ -12,14 +12,14 @@ func Run() {
 
 	target := "000008515" // номер накладной для подписания — меняй здесь
 
-	s := New(ConfigFromEnv())
+	cfg := ConfigFromEnv()
+	browser := NewBrowser(cfg)
+	defer browser.Close()
 
-	if err := s.Open(); err != nil {
-		log.Fatal(err)
-	}
-	defer s.Close()
+	session := browser.NewSession()
+	defer session.Close()
 
-	ctx := s.Ctx()
+	ctx := session.Ctx()
 
 	// Шаг 1: перейти на страницу логина
 	if err := NavigateToLogin(ctx); err != nil {
@@ -30,11 +30,10 @@ func Run() {
 	DismissCookieBanner(ctx)
 
 	// Шаг 3: два варианта логина
-	loggedIn, err := LoginIfNeeded(ctx, s.Cfg().CertUser)
-	if err != nil {
-		log.Fatal("login:", err)
-	}
-	if loggedIn {
+	if ElementExists(ctx, "Сертификат") {
+		if err := Login(ctx, cfg.CertUser); err != nil {
+			log.Fatal("login:", err)
+		}
 		log.Println("Выполнен вход через сертификат")
 	} else {
 		log.Println("Уже залогинены, пропускаем авторизацию")
@@ -73,7 +72,7 @@ func Run() {
 
 	// Шаг 6: подписать накладную
 	log.Printf("Пробуем подписать накладную %s...", target)
-	if err := SignDeliveryNote(ctx, target, s.Cfg().CertUser); err != nil {
+	if err := SignDeliveryNote(ctx, target, cfg.CertUser); err != nil {
 		log.Fatal("sign:", err)
 	}
 	log.Println("Подписание завершено успешно!")

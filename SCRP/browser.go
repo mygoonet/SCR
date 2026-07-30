@@ -43,12 +43,26 @@ func buildChromeOpts(cfg Config) []chromedp.ExecAllocatorOption {
 	}
 }
 
-func NewBrowser(cfg Config) (context.Context, context.CancelFunc) {
+type Browser struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+func NewBrowser(cfg Config) *Browser {
 	cleanStaleLock(cfg.UserDataDir)
 
 	opts := buildChromeOpts(cfg)
 	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), opts...)
 	ctx, cancel := chromedp.NewContext(allocCtx)
 
-	return ctx, cancel
+	return &Browser{ctx: ctx, cancel: cancel}
+}
+
+func (b *Browser) NewSession() *Session {
+	ctx, cancel := chromedp.NewContext(b.ctx)
+	return &Session{ctx: ctx, cancel: cancel}
+}
+
+func (b *Browser) Close() {
+	b.cancel()
 }

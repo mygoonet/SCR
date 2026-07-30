@@ -10,128 +10,112 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// Scraper — обёртка над Session для периодического опроса и подписания накладных.
-type Scraper struct {
-	session   *Session
-	signCh    chan string
-	signAllCh chan chan error
-	listCh    chan chan []DeliveryNote
-}
+func Monitor(browser *Browser, cfg Config, interval time.Duration) {
+	session := browser.NewSession()
+	defer session.Close()
 
-// NewScraper создаёт новый скрепер с заданной конфигурацией.
-func NewScraper(cfg Config) *Scraper {
-	return &Scraper{
-		session:   New(cfg),
-		signCh:    make(chan string, 10),
-		signAllCh: make(chan chan error, 1),
-		listCh:    make(chan chan []DeliveryNote, 1),
-	}
-}
+	ctx := session.Ctx()
 
-// Start запускает цикл: каждые 50 секунд выводит список и подписывает все накладные.
-func (sc *Scraper) Start() error {
-	if err := sc.session.Open(); err != nil {
-		return fmt.Errorf("open session: %w", err)
-	}
-	defer sc.session.Close()
-
-	ctx := sc.session.Ctx()
-
-	if err := sc.initSession(ctx); err != nil {
-		return fmt.Errorf("init session: %w", err)
+	if err := initSession(ctx, cfg); err != nil {
+		log.Printf("Monitor: init session: %v", err)
+		return
 	}
 
-	log.Println("Scraper запущен. Тикер 50с: вывод + автоподпись всех")
+	log.Println("Monitor запущен. Тикер:", interval)
 
-	// Сразу получаем накладные при старте
-	notes, err := sc.fetchNotes(ctx)
+	notes, err := fetchNotes(ctx)
 	if err != nil {
-		log.Printf("Ошибка получения накладных: %v", err)
+		log.Printf("Monitor: ошибка получения накладных: %v", err)
 	} else {
-		log.Printf("Накладные (%d):", len(notes))
+		log.Printf("Monitor: накладные (%d):", len(notes))
 		for _, n := range notes {
 			log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
 		}
+		if len(notes) > 0 {
+			if err := signAll(ctx, cfg.CertUser, notes); err != nil {
+				log.Printf("Monitor: SignAll ошибка: %v", err)
+			} else {
+				log.Println("Monitor: SignAll завершено")
+			}
+		}
 	}
 
-	ticker := time.NewTicker(600 * time.Second)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case number := <-sc.signCh:
-			log.Printf(">>> Подписание накладной %s...", number)
-			go sc.signOne(ctx, number)
+	for range ticker.C {
+		notes, err := fetchNotes(ctx)
+		if err != nil {
+			log.Printf("Monitor: ошибка получения накладных: %v", err)
+			continue
+		}
 
-		case listResp := <-sc.listCh:
-			notes, err := sc.fetchNotes(ctx)
-			if err != nil {
-				log.Printf("Ошибка получения накладных: %v", err)
-				listResp <- nil
+		log.Printf("Monitor: накладные (%d):", len(notes))
+		for _, n := range notes {
+			log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
+		}
+
+		if len(notes) > 0 {
+			if err := signAll(ctx, cfg.CertUser, notes); err != nil {
+				log.Printf("Monitor: SignAll ошибка: %v", err)
 			} else {
-				listResp <- notes
-			}
-
-		case respCh := <-sc.signAllCh:
-			go func() {
-				respCh <- sc.signAllInCtx(ctx)
-			}()
-
-		case <-ticker.C:
-			notes, err := sc.fetchNotes(ctx)
-			if err != nil {
-				log.Printf("Ошибка получения накладных: %v", err)
-			} else {
-				log.Printf("Накладные (%d):", len(notes))
-				for _, n := range notes {
-					log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
-				}
-
-				if len(notes) > 0 {
-					if err := sc.signAll(notes); err != nil {
-						log.Printf(">>> SignAll ошибка: %v", err)
-					} else {
-						log.Println(">>> SignAll завершено")
-					}
-				}
+				log.Println("Monitor: SignAll завершено")
 			}
 		}
 	}
 }
 
-func (sc *Scraper) signOne(ctx context.Context, number string) {
-	if err := SignDeliveryNote(ctx, number, sc.session.Cfg().CertUser); err != nil {
-		log.Printf(">>> Ошибка подписания %s: %v", number, err)
-	} else {
-		log.Printf(">>> Накладная %s подписана", number)
+func SignSession(browser *Browser, cfg Config, numbers []string) error {
+	session := browser.NewSession()
+	defer session.Close()
+
+	ctx := session.Ctx()
+
+	if err := initSession(ctx, cfg); err != nil {
+		return fmt.Errorf("init session: %w", err)
 	}
+
+	var notes []DeliveryNote
+	for _, num := range numbers {
+		notes = append(notes, DeliveryNote{Number: num})
+	}
+
+	return signAll(ctx, cfg.CertUser, notes)
 }
 
-func (sc *Scraper) signAllInCtx(ctx context.Context) error {
-	notes, err := sc.fetchNotes(ctx)
-	if err != nil {
-		return fmt.Errorf("получить список: %w", err)
+func initSession(ctx context.Context, cfg Config) error {
+	if err := NavigateToLogin(ctx); err != nil {
+		return fmt.Errorf("navigate: %w", err)
 	}
-	return sc.signAll(notes)
+	DismissCookieBanner(ctx)
+
+	if ElementExists(ctx, "Сертификат") {
+		if err := Login(ctx, cfg.CertUser); err != nil {
+			return fmt.Errorf("login: %w", err)
+		}
+	}
+
+	if err := NavigateToCarrier(ctx); err != nil {
+		return fmt.Errorf("carrier: %w", err)
+	}
+	return nil
 }
 
 var skipNumbers = map[string]bool{
 	"000000420": true,
 }
 
-func (sc *Scraper) signAll(notes []DeliveryNote) error {
-	ctx := sc.session.Ctx()
-	cert := sc.session.Cfg().CertUser
+func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
 	var firstErr error
 	for _, n := range notes {
 		if skipNumbers[n.Number] {
-			log.Printf(">>> SignAll: пропускаю %s (тестовая)", n.Number)
+			log.Printf(">>> signAll: пропускаю %s (тестовая)", n.Number)
 			continue
 		}
 		signed := false
 		for attempt := 1; attempt <= 3; attempt++ {
-			log.Printf(">>> SignAll: подписываю %s (попытка %d)...", n.Number, attempt)
-			if err := SignDeliveryNote(ctx, n.Number, cert); err != nil {
+			log.Printf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
+			if err := SignDeliveryNote(ctx, n.Number, certUser); err != nil {
 				log.Printf(">>> Ошибка подписания %s: %v", n.Number, err)
 				if firstErr == nil {
 					firstErr = err
@@ -147,7 +131,7 @@ func (sc *Scraper) signAll(notes []DeliveryNote) error {
 			reloadNoCache(ctx)
 			waitForTableRows(ctx)
 			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
-			refreshed, err := sc.fetchNotes(ctx)
+			refreshed, err := fetchNotes(ctx)
 			if err != nil {
 				log.Printf(">>> Ошибка обновления списка: %v", err)
 				break
@@ -172,55 +156,6 @@ func (sc *Scraper) signAll(notes []DeliveryNote) error {
 	return firstErr
 }
 
-// Sign отправляет запрос на подпись одной накладной.
-func (sc *Scraper) Sign(number string) {
-	select {
-	case sc.signCh <- number:
-	default:
-		log.Printf(">>> signCh переполнен, пропускаю %s", number)
-	}
-}
-
-// SignAll подписывает все текущие накладные.
-func (sc *Scraper) SignAll() <-chan error {
-	resp := make(chan error, 1)
-	select {
-	case sc.signAllCh <- resp:
-	default:
-		log.Printf(">>> signAllCh переполнен, пропускаю запрос")
-	}
-	return resp
-}
-
-// GetListNotes асинхронно получает список накладных.
-func (sc *Scraper) GetListNotes() <-chan []DeliveryNote {
-	resp := make(chan []DeliveryNote, 1)
-	select {
-	case sc.listCh <- resp:
-	default:
-		log.Printf(">>> listCh переполнен, пропускаю запрос")
-	}
-	return resp
-}
-
-func (sc *Scraper) initSession(ctx context.Context) error {
-	if err := NavigateToLogin(ctx); err != nil {
-		return fmt.Errorf("navigate: %w", err)
-	}
-	dismissCookieBanner(ctx)
-
-	if ElementExists(ctx, "Сертификат") {
-		if err := Login(ctx, sc.session.cfg.CertUser); err != nil {
-			return fmt.Errorf("login: %w", err)
-		}
-	}
-
-	if err := NavigateToCarrier(ctx); err != nil {
-		return fmt.Errorf("carrier: %w", err)
-	}
-	return nil
-}
-
 func closePopups(ctx context.Context) {
 	for i := 0; i < 3; i++ {
 		chromedp.Run(ctx, chromedp.KeyEvent("\x1b"))
@@ -240,7 +175,7 @@ func reloadNoCache(ctx context.Context) {
 	}))
 }
 
-func (sc *Scraper) fetchNotes(ctx context.Context) ([]DeliveryNote, error) {
+func fetchNotes(ctx context.Context) ([]DeliveryNote, error) {
 	notes, err := ParseDeliveryNotes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
@@ -251,8 +186,5 @@ func (sc *Scraper) fetchNotes(ctx context.Context) ([]DeliveryNote, error) {
 			filtered = append(filtered, n)
 		}
 	}
-	sc.session.mu.Lock()
-	sc.session.notes = filtered
-	sc.session.mu.Unlock()
 	return filtered, nil
 }
