@@ -54,7 +54,7 @@ func (sc *Scraper) Start() error {
 		}
 	}
 
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(600 * time.Second)
 	defer ticker.Stop()
 
 	for {
