@@ -1,11 +1,21 @@
 package main
 
 import (
-	"SCR/SCRP"
 	"log"
+
+	"SCR/SCRP"
 )
 
 func main() {
+	/*		cfg := SCRP.ConfigFromEnv()
+
+			if cfg.ChromePath == "" || cfg.CertUser == "" {
+				log.Fatal("CHROME_PATH and CERT_USER env vars are required")
+			}
+			if cfg.UserDataDir == "" {
+				cfg.UserDataDir = "/home/app/.config/chromium-gost-scrp"
+			}*/
+
 	cfg := SCRP.Config{
 		UserDataDir: "/home/visa/.config/chromium-gost-scrp",
 		ChromePath:  "/usr/bin/chromium-gost-stable",

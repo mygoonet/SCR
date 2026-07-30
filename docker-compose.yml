@@ -1,0 +1,16 @@
+services:
+  scr:
+    build: .
+    env_file: .env
+    volumes:
+      - ./tmp:/tmp
+      - /opt/chromium-gost:/opt/chromium-gost:ro
+      - /opt/cprocsp:/opt/cprocsp:ro
+      - /var/opt/cprocsp:/var/opt/cprocsp:ro
+      - /etc/opt/cprocsp:/etc/opt/cprocsp:ro
+      - /opt/kontur.plugin:/opt/kontur.plugin:ro
+      - /etc/chromium:/etc/chromium:ro
+      - /root/chromium-profile:/home/app/.config/chromium-gost-scrp
+    environment:
+      - LD_LIBRARY_PATH=/opt/cprocsp/lib/amd64
+    restart: unless-stopped
