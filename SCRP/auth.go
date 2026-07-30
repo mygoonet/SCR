@@ -9,6 +9,36 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+func NavigateToLogin_old(ctx context.Context) error {
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate("https://logist.kontur.ru/box-selection"),
+		chromedp.WaitReady(`body`),
+		chromedp.Sleep(5*time.Second),
+	); err != nil {
+		return err
+	}
+
+	// Ждём до 10 секунд, проверяя каждые 0.5с
+	timeout := time.After(20 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for page content")
+		case <-ticker.C:
+			var textLen int
+			if err := chromedp.Run(ctx, chromedp.Evaluate(`document.body.innerText.length`, &textLen)); err != nil {
+				return fmt.Errorf("evaluate text length: %w", err)
+			}
+			if textLen > 200 {
+				return nil
+			}
+		}
+	}
+}
+
 func NavigateToLogin(ctx context.Context) error {
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate("https://logist.kontur.ru/box-selection"),
@@ -24,7 +54,10 @@ func NavigateToLogin(ctx context.Context) error {
 		if textLen > 200 {
 			break
 		}
-		chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
+		err := chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

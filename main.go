@@ -1,85 +1,56 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
-	"os"
-
 	"SCR/SCRP"
-
-	"github.com/chromedp/chromedp"
+	"log"
 )
 
 func main() {
-	target := "000008515" // номер накладной для подписания — меняй здесь
-
-	s := SCRP.New(SCRP.Config{
+	cfg := SCRP.Config{
 		UserDataDir: "/home/visa/.config/chromium-gost-scrp",
 		ChromePath:  "/usr/bin/chromium-gost-stable",
 		CertUser:    "Сичкарук Евгений Александрович",
-	})
-
-	if err := s.Open(); err != nil {
-		log.Fatal(err)
-	}
-	defer s.Close()
-
-	ctx := s.Ctx()
-
-	// Шаг 1: перейти на страницу логина
-	if err := SCRP.NavigateToLogin(ctx); err != nil {
-		log.Fatal(err)
 	}
 
-	// Шаг 2: принять куки если есть
-	SCRP.DismissCookieBanner(ctx)
+	scraper := SCRP.NewScraper(cfg)
 
-	// Шаг 3: два варианта логина
-	loggedIn, err := SCRP.LoginIfNeeded(ctx, s.Cfg().CertUser)
-	if err != nil {
-		log.Fatal("login:", err)
-	}
-	if loggedIn {
-		log.Println("Выполнен вход через сертификат")
-	} else {
-		log.Println("Уже залогинены, пропускаем авторизацию")
-	}
+	// Запускаем скрепер в горутине
+	go func() {
+		if err := scraper.Start(); err != nil {
+			log.Fatalf("scraper: %v", err)
+		}
+	}()
 
-	// Скриншот после входа
-	var buf []byte
-	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 90)); err == nil {
-		os.WriteFile("/tmp/opencode/after_login.png", buf, 0644)
-		log.Println("Скриншот после входа сохранён: /tmp/opencode/after_login.png")
-	}
+	// Команды: подпись + запрос списка
+	/*go func() {
+		time.Sleep(30 * time.Second)
 
-	var currentURL string
-	chromedp.Run(ctx, chromedp.Location(&currentURL))
-	log.Printf("Текущий URL после входа: %s", currentURL)
+		log.Println(">>> Отправка на подпись: 000008514")
+		scraper.Sign("000008514")
 
-	// Шаг 4: перейти в раздел Перевозчика
-	if err := SCRP.NavigateToCarrier(ctx); err != nil {
-		log.Fatal("carrier:", err)
-	}
+		time.Sleep(10 * time.Second)
 
-	// Скриншот после выбора перевозчика
-	var buf2 []byte
-	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf2, 90)); err == nil {
-		os.WriteFile("/tmp/opencode/after_carrier.png", buf2, 0644)
-		log.Println("Скриншот после выбора перевозчика: /tmp/opencode/after_carrier.png")
-	}
+		log.Println(">>> Отправка на подпись: 000008515")
+		scraper.Sign("000008515")
 
-	// Шаг 5: получить список накладных
-	notes, err := SCRP.ParseDeliveryNotes(ctx)
-	if err != nil {
-		log.Fatal("parse:", err)
-	}
-	b, _ := json.MarshalIndent(notes, "", "  ")
-	log.Printf("Получено %d накладных:\n%s", len(notes), string(b))
+		time.Sleep(5 * time.Second)
 
-	// Шаг 6: подписать накладную
-	log.Printf("Пробуем подписать накладную %s...", target)
-	if err := SCRP.SignDeliveryNote(ctx, target, s.Cfg().CertUser); err != nil {
-		log.Fatal("sign:", err)
-	}
-	log.Println("Подписание завершено успешно!")
+		log.Println(">>> Запрос списка накладных")
+		listCh := scraper.GetListNotes()
+		notes := <-listCh
+		if notes == nil {
+			log.Println(">>> Список не получен")
+		} else {
+			log.Printf(">>> Получено %d накладных", len(notes))
+			for _, n := range notes {
+				log.Printf("  %s  от %s", n.Number, n.Date)
+			}
+		}
+
+		scraper.SignAll()
+
+	}() */
+
+	// Даем время на обработку
+	select {}
 }
