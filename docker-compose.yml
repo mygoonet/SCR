@@ -11,6 +11,8 @@ services:
       - /opt/kontur.plugin:/opt/kontur.plugin:ro
       - /etc/chromium:/etc/chromium:ro
       - /root/chromium-profile:/home/app/.config/chromium-gost-scrp
+    tmpfs:
+      - /var/opt/cprocsp/tmp
     environment:
       - LD_LIBRARY_PATH=/opt/cprocsp/lib/amd64
     restart: unless-stopped
