@@ -184,7 +184,7 @@ func countdownAnnouncer(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Minute):
-			log.Printf("⏳ До следующего сбора: %d мин", m-1)
+			log.Printf("⏳ До следующего обновления: %d мин", m-1)
 		}
 	}
 }
