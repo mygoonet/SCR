@@ -43,6 +43,8 @@ func Monitor(browser *Browser, cfg Config, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	go countdownAnnouncer(ctx, interval)
+
 	for range ticker.C {
 		notes, err := fetchNotes(ctx)
 		if err != nil {
@@ -173,6 +175,18 @@ func reloadNoCache(ctx context.Context) {
 	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return network.SetCacheDisabled(false).Do(ctx)
 	}))
+}
+
+func countdownAnnouncer(ctx context.Context, interval time.Duration) {
+	minutes := int(interval.Minutes())
+	for m := minutes; m > 0; m-- {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Minute):
+			log.Printf("⏳ До следующего сбора: %d мин", m-1)
+		}
+	}
 }
 
 func fetchNotes(ctx context.Context) ([]DeliveryNote, error) {
