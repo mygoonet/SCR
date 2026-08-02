@@ -103,6 +103,8 @@ func initSession(ctx context.Context, cfg Config) error {
 
 var skipNumbers = map[string]bool{
 	"000000420": true,
+	"000009640": true,
+	"000009641": true,
 }
 
 func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
