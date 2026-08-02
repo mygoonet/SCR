@@ -136,8 +136,15 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 		return fmt.Errorf("click Sign: %w", err)
 	}
 
+	// Wait for SidePage to close before certificate modal opens.
+	if err := waitForJS(ctx, `document.querySelector('[data-tid*="SidePage"][data-tid*="root"]') === null`, 15*time.Second); err != nil {
+		log.Printf("SidePage did not close: %v; proceeding anyway", err)
+	}
+	chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+
 	// 4. Модалка "Выбор сертификата" -> клик по сертификату пользователя -> "Выбрать"
 	if err := waitForJS(ctx, `document.querySelector('[data-tid^="certificate_"]') !== null`, 30*time.Second); err != nil {
+		takeScreenshot(ctx, number+"_5_cert_timeout")
 		return fmt.Errorf("certificate modal: %w", err)
 	}
 	takeScreenshot(ctx, number+"_5_cert")
