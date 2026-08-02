@@ -42,12 +42,15 @@ func NavigateToLogin_old(ctx context.Context) error {
 func NavigateToLogin(ctx context.Context) error {
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate("https://logist.kontur.ru/box-selection"),
+
 		chromedp.WaitReady(`body`),
+
 		chromedp.Sleep(5*time.Second),
 	); err != nil {
 		return err
 	}
 
+	takeScreenshot(ctx, "LOGIN?CERTIFICATE")
 	for i := 0; i < 20; i++ {
 		var textLen int
 		chromedp.Run(ctx, chromedp.Evaluate(`document.body.innerText.length`, &textLen))
