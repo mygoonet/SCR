@@ -104,8 +104,6 @@ func initSession(ctx context.Context, cfg Config) error {
 var skipNumbers = map[string]bool{
 	"000000420": true,
 
-	"000009341": true,
-
 	"000009342": true,
 	"000009340": true,
 	"000009338": true,
