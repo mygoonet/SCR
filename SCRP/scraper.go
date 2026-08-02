@@ -105,8 +105,6 @@ var skipNumbers = map[string]bool{
 	"000000420": true,
 
 	"000009342": true,
-	"000009340": true,
-	"000009338": true,
 }
 
 func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
