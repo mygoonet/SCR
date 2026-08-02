@@ -43,9 +43,13 @@ func Monitor(browser *Browser, cfg Config, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	go countdownAnnouncer(ctx, interval)
+	resetCh := make(chan struct{}, 1)
+	go countdownAnnouncer(ctx, interval, resetCh)
+	resetCh <- struct{}{}
 
 	for range ticker.C {
+		resetCh <- struct{}{}
+
 		notes, err := fetchNotes(ctx)
 		if err != nil {
 			log.Printf("Monitor: ошибка получения накладных: %v", err)
@@ -177,14 +181,19 @@ func reloadNoCache(ctx context.Context) {
 	}))
 }
 
-func countdownAnnouncer(ctx context.Context, interval time.Duration) {
+func countdownAnnouncer(ctx context.Context, interval time.Duration, resetCh chan struct{}) {
 	minutes := int(interval.Minutes())
-	for m := minutes; m > 0; m-- {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Minute):
-			log.Printf("⏳ До следующего обновления: %d мин", m-1)
+	for {
+		for m := minutes; m > 0; m-- {
+			select {
+			case <-ctx.Done():
+				return
+			case <-resetCh:
+				log.Println("⏳ Обратный отсчёт перезапущен")
+				m = minutes + 1
+			case <-time.After(time.Minute):
+				log.Printf("⏳ До следующего обновления: %d мин", m-1)
+			}
 		}
 	}
 }
