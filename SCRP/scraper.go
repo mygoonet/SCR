@@ -50,6 +50,10 @@ func Monitor(browser *Browser, cfg Config, interval time.Duration) {
 	for range ticker.C {
 		resetCh <- struct{}{}
 
+		reloadNoCache(ctx)
+
+		waitForTableRows(ctx)
+
 		notes, err := fetchNotes(ctx)
 		if err != nil {
 			log.Printf("Monitor: ошибка получения накладных: %v", err)
@@ -90,6 +94,10 @@ func SignSession(browser *Browser, cfg Config, numbers []string) error {
 }
 
 func initSession(ctx context.Context, cfg Config) error {
+	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return network.SetCacheDisabled(true).Do(ctx)
+	}))
+
 	if err := NavigateToLogin(ctx); err != nil {
 		return fmt.Errorf("navigate: %w", err)
 	}
