@@ -94,6 +94,7 @@ func SignSession(browser *Browser, cfg Config, numbers []string) error {
 }
 
 func initSession(ctx context.Context, cfg Config) error {
+	//CACHE IS DISABLED GLOBAL
 	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return network.SetCacheDisabled(true).Do(ctx)
 	}))
