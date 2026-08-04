@@ -60,20 +60,23 @@ func waitForTableRows(ctx context.Context) error {
 			return nil
 		}
 		// Нет ни одной реальной строки — но, возможно, это честное "пусто".
-		// Проверяем признак пустого состояния и выходим без ошибки.
+		// Проверяем признак пустого состояния по всему документу (textContent,
+		// не только внутри TableRow — плейсхолдер может быть отдельным блоком).
 		var empty bool
 		chromedp.Run(ctx, chromedp.Evaluate(
-			`(function(){
-				var rows = document.querySelectorAll('[data-tid="TableRow"]');
-				for(var i=0;i<rows.length;i++){
-					if(rows[i].innerText.indexOf('Накладные не найдены') !== -1) return true;
-				}
-				return false;
-			})()`, &empty))
+			`(document.body.textContent.indexOf('Накладные не найдены') !== -1)`, &empty))
 		if empty {
 			return nil
 		}
 		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+	}
+	// Финальная проверка перед ошибкой — возможно, пустое состояние появилось
+	// в самую последнюю секунду опроса и не успело обработаться в цикле.
+	var empty bool
+	chromedp.Run(ctx, chromedp.Evaluate(
+		`(document.body.textContent.indexOf('Накладные не найдены') !== -1)`, &empty))
+	if empty {
+		return nil
 	}
 	return fmt.Errorf("waybill table did not load in 30s")
 }
