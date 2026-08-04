@@ -126,16 +126,16 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	}
 
 	// 1. Меню "три точки" в строке накладной
-	takeScreenshot(ctx, number+"_2_menu")
 	if err := openRowMenu(ctx, number); err != nil {
 		return fmt.Errorf("open row menu: %w", err)
 	}
 
 	// 2. Пункт "Подписать без подписи водителя"
+	// ВНИМАНИЕ: между waitForJS и clickAtCenter НЕ делать takeScreenshot —
+	// FullScreenshot перехватывает фокус и React закрывает попап,
+	// элемент исчезает из DOM (querySelector → null).
 	signItemJS := `document.querySelector('[data-tid="Popup__root"] [data-tid="SignWithoutDriverSignature"]') !== null`
 	if err := waitForJS(ctx, signItemJS, 10*time.Second); err != nil {
-		// Диагностика: дамп содержимого открытого попапа и всех Popup-элементов,
-		// чтобы понять, какие пункты реально в меню.
 		var popupDump string
 		chromedp.Run(ctx, chromedp.Evaluate(`(function(){
 			var p = document.querySelector('[data-tid="Popup__root"]');
@@ -145,7 +145,6 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 		log.Printf("SIGN-DEBUG %s: signItem wait failed. %s", number, popupDump)
 		return fmt.Errorf("sign menu item: %w", err)
 	}
-	takeScreenshot(ctx, number+"_3_sign_item")
 	if err := clickAtCenter(ctx, `document.querySelector('[data-tid="SignWithoutDriverSignature"]')`); err != nil {
 		return fmt.Errorf("click sign item: %w", err)
 	}
@@ -155,7 +154,6 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	if err := waitForJS(ctx, sidePageJS, 15*time.Second); err != nil {
 		return fmt.Errorf("sign side page: %w", err)
 	}
-	takeScreenshot(ctx, number+"_4_side_page")
 	signBtnJS := `(function(){
 		var f = document.querySelector('[data-tid="SidePageFooter__root"]');
 		if(!f) return null;
@@ -167,10 +165,11 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	}
 
 	// 4. Модалка "Выбор сертификата" -> клик по сертификату пользователя -> "Выбрать"
+	// Скриншоты между шагами убраны — FullScreenshot перехватывает фокус и
+	// закрывает React-попапы/модалки, элементы исчезают из DOM.
 	if err := waitForJS(ctx, `document.querySelector('[data-tid^="certificate_"]') !== null`, 30*time.Second); err != nil {
 		return fmt.Errorf("certificate modal: %w", err)
 	}
-	takeScreenshot(ctx, number+"_5_cert")
 	certJS := fmt.Sprintf(`(function(user){
 		var certs = document.querySelectorAll('[data-tid^="certificate_"]');
 		for(var i=0;i<certs.length;i++){
@@ -194,7 +193,6 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	if err := waitForJS(ctx, `document.querySelector('[data-tid="representative-poa-list-item"]') !== null`, 30*time.Second); err != nil {
 		return fmt.Errorf("poa modal: %w", err)
 	}
-	takeScreenshot(ctx, number+"_6_poa")
 	if err := clickAtCenter(ctx, `document.querySelector('[data-tid="representative-poa-list-item"]')`); err != nil {
 		return fmt.Errorf("click poa: %w", err)
 	}
@@ -208,14 +206,13 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	}
 
 	// 6. Ждём закрытия модалки — подписание выполняется криптоплагином
-	takeScreenshot(ctx, number+"_7_signing")
 	if err := waitForJS(ctx,
 		`document.querySelector('[data-tid*="Modal"][data-tid*="root"], [role="dialog"]') === null`,
 		90*time.Second); err != nil {
 		return fmt.Errorf("signing did not finish: %w", err)
 	}
 
-	takeScreenshot(ctx, number+"_8_done")
+	takeScreenshot(ctx, number+"_done")
 	chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
 	return nil
 }
