@@ -32,7 +32,7 @@ func Monitor(browser *Browser, cfg Config, tel *TelegramClient, interval time.Du
 			log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
 		}
 		if len(notes) > 0 {
-			if err := signAll(ctx, cfg.CertUser, notes); err != nil {
+			if err := signAll(ctx, cfg.CertUser, notes, tel); err != nil {
 				log.Printf("Monitor: SignAll ошибка: %v", err)
 			} else {
 				log.Println("Monitor: SignAll завершено")
@@ -66,16 +66,17 @@ func Monitor(browser *Browser, cfg Config, tel *TelegramClient, interval time.Du
 		}
 
 		if len(notes) > 0 {
-			if err := signAll(ctx, cfg.CertUser, notes); err != nil {
+			if err := signAll(ctx, cfg.CertUser, notes, tel); err != nil {
 				log.Printf("Monitor: SignAll ошибка: %v", err)
 			} else {
 				log.Println("Monitor: SignAll завершено")
+				tel.Sendf("Monitor: SignAll завершено")
 			}
 		}
 	}
 }
 
-func SignSession(browser *Browser, cfg Config, numbers []string) error {
+/*func SignSession(browser *Browser, cfg Config, numbers []string) error {
 	session := browser.NewSession()
 	defer session.Close()
 
@@ -91,7 +92,7 @@ func SignSession(browser *Browser, cfg Config, numbers []string) error {
 	}
 
 	return signAll(ctx, cfg.CertUser, notes)
-}
+}*/
 
 func initSession(ctx context.Context, cfg Config) error {
 	//CACHE IS DISABLED GLOBAL
@@ -120,7 +121,7 @@ var skipNumbers = map[string]bool{
 	"000000420": true,
 }
 
-func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
+func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient) error {
 	var firstErr error
 	for _, n := range notes {
 		if skipNumbers[n.Number] {
@@ -129,7 +130,10 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
 		}
 		signed := false
 		for attempt := 1; attempt <= 3; attempt++ {
+
 			log.Printf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
+			tel.Sendf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
+
 			if err := SignDeliveryNote(ctx, n.Number, certUser); err != nil {
 				log.Printf(">>> Ошибка подписания %s: %v", n.Number, err)
 				if firstErr == nil {
@@ -141,6 +145,8 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
 				continue
 			}
 			log.Printf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
+			tel.Sendf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
+
 			closePopups(ctx)
 			chromedp.Run(ctx, chromedp.Sleep(5*time.Second))
 			reloadNoCache(ctx)
