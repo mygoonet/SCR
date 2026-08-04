@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
@@ -66,6 +67,7 @@ func Monitor(browser *Browser, cfg Config, interval time.Duration) {
 				log.Printf("Monitor: SignAll ошибка: %v", err)
 			} else {
 				log.Println("Monitor: SignAll завершено")
+				//tel.Sendf("Monitor: SignAll завершено")
 			}
 		}
 	}

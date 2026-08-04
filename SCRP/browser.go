@@ -2,8 +2,10 @@ package SCRP
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/chromedp/chromedp"
 )
@@ -15,6 +17,7 @@ func cleanStaleLock(dir string) {
 }
 
 func buildChromeOpts(cfg Config) []chromedp.ExecAllocatorOption {
+
 	return []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(cfg.ChromePath),
 		chromedp.NoFirstRun,
@@ -56,9 +59,21 @@ type Browser struct {
 func NewBrowser(cfg Config) *Browser {
 	cleanStaleLock(cfg.UserDataDir)
 
+	filteredLogger := func(format string, v ...any) {
+		if strings.Contains(format, "unhandled node event") {
+			return // Игнорируем unhandled node event
+		}
+		log.Printf(format, v...)
+	}
+
 	opts := buildChromeOpts(cfg)
 	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), opts...)
-	ctx, cancel := chromedp.NewContext(allocCtx)
+	ctx, cancel := chromedp.NewContext(allocCtx, chromedp.WithErrorf(filteredLogger))
+
+	// Форсируем аллокацию браузера на этом контексте, чтобы browserOpts
+	// (включая WithErrorf) были переданы в Allocate. Без этого первый Run
+	// на дочернем контексте (NewSession) аллоцирует браузер без опций.
+	chromedp.Run(ctx, chromedp.Navigate("about:blank"))
 
 	return &Browser{ctx: ctx, cancel: cancel}
 }
