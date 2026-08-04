@@ -22,26 +22,29 @@ import (
 func clickAtCenter(ctx context.Context, findJS string) error {
 	const pollTimeout = 10 * time.Second
 	deadline := time.Now().Add(pollTimeout)
+	lastDebug := "no-eval"
 	for {
 		var posJSON string
 		if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(){
 			var el = %s;
-			if(!el) return JSON.stringify({ok:false});
+			if(!el) return JSON.stringify({ok:false, dbg:'null'});
 			var r = el.getBoundingClientRect();
-			if(r.width === 0 || r.height === 0) return JSON.stringify({ok:false});
-			return JSON.stringify({ok:true, cx:r.left+r.width/2, cy:r.top+r.height/2});
+			var dbg = 'el='+el.tagName+' '+el.getAttribute('data-tid')+' w='+r.width+' h='+r.height+' vis='+getComputedStyle(el).visibility+' disp='+getComputedStyle(el).display+' hidden='+(el.hidden||'')+' off='+el.offsetParent;
+			if(r.width === 0 || r.height === 0) return JSON.stringify({ok:false, dbg:dbg});
+			return JSON.stringify({ok:true, cx:r.left+r.width/2, cy:r.top+r.height/2, dbg:dbg});
 		})()`, findJS), &posJSON)); err != nil {
-			// Если контекст отменён (таймаут) — выходим сразу.
 			if ctx.Err() != nil {
 				return err
 			}
 		} else {
 			var pos struct {
-				Ok bool    `json:"ok"`
-				CX float64 `json:"cx"`
-				CY float64 `json:"cy"`
+				Ok  bool    `json:"ok"`
+				CX  float64 `json:"cx"`
+				CY  float64 `json:"cy"`
+				Dbg string  `json:"dbg"`
 			}
 			json.Unmarshal([]byte(posJSON), &pos)
+			lastDebug = pos.Dbg
 			if pos.Ok {
 				return chromedp.Run(ctx, chromedp.MouseClickXY(pos.CX, pos.CY))
 			}
@@ -52,7 +55,8 @@ func clickAtCenter(ctx context.Context, findJS string) error {
 		}
 		chromedp.Run(ctx, chromedp.Sleep(300*time.Millisecond))
 	}
-	return fmt.Errorf("element not found or invisible (polled %s): %s", pollTimeout, findJS)
+	log.Printf("CLICK-DEBUG: failed to find clickable: %s | %s", findJS, lastDebug)
+	return fmt.Errorf("element not found or invisible (polled %s): %s [last=%s]", pollTimeout, findJS, lastDebug)
 }
 
 // waitForJS ждёт, пока JS-условие станет true.
@@ -72,23 +76,25 @@ func waitForJS(ctx context.Context, js string, timeout time.Duration) error {
 }
 
 // openRowMenu открывает меню "три точки" в строке накладной с номером number.
-// Кликаем реальной мышью по центру кнопки — синтетический btn.click()
-// не триггерит React-обработчик Контура, поэтому пункт
-// "Подписать без подписи водителя" часто не появлялся на первой попытке.
 func openRowMenu(ctx context.Context, number string) error {
-	btnJS := fmt.Sprintf(`(function(num){
+	var res string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(num){
 		var rows = document.querySelectorAll('[data-tid="TableRow"]');
 		for(var i=0;i<rows.length;i++){
 			var numEl = rows[i].querySelector('[data-tid="WaybillNumber"]');
 			if(numEl && numEl.textContent.trim() === num){
 				var btn = rows[i].querySelector('[data-tid="RowActionsButton"] button[aria-controls*="Popup"], [data-tid="RowActionsButton"] button');
-				return btn || null;
+				if(!btn) return 'no menu button';
+				btn.click();
+				return 'ok';
 			}
 		}
-		return null;
-	})(%q)`, number)
-	if err := clickAtCenter(ctx, btnJS); err != nil {
-		return fmt.Errorf("waybill %q: open menu: %w", number, err)
+		return 'not found';
+	})(%q)`, number), &res)); err != nil {
+		return err
+	}
+	if res != "ok" {
+		return fmt.Errorf("waybill %q: %s", number, res)
 	}
 	return nil
 }
