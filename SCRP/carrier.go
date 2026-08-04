@@ -70,15 +70,9 @@ func waitForTableRows(ctx context.Context) error {
 		}
 		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
 	}
-	// Финальная проверка перед ошибкой — возможно, пустое состояние появилось
-	// в самую последнюю секунду опроса и не успело обработаться в цикле.
-	var empty bool
-	chromedp.Run(ctx, chromedp.Evaluate(
-		`(document.body.textContent.indexOf('Накладные не найдены') !== -1)`, &empty))
-	if empty {
-		return nil
-	}
-	return fmt.Errorf("waybill table did not load in 30s")
+	// Реальных строк нет и пустого состояния тоже — просто идём дальше
+	// (parse вернёт 0 накладных). Не падаем, чтобы Monitor продолжал работу.
+	return nil
 }
 
 func ParseDeliveryNotes(ctx context.Context) ([]DeliveryNote, error) {
