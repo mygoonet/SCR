@@ -20,7 +20,7 @@ func main() {
 	browser := SCRP.NewBrowser(cfg)
 	defer browser.Close()
 
-	go telegram.Sendf("TEST FROM")
+	go telegram.Sendf("TEST FROM SCRAPPER")
 	// Монитор — живёт всегда, опрос каждые 10 минут
 	go SCRP.Monitor(browser, cfg, telegram, 10*time.Minute)
 

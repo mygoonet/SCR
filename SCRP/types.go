@@ -42,9 +42,9 @@ func ConfigFromEnv() Config {
 	if cfg.TelegramChat == "" {
 		cfg.TelegramChat = "69502589"
 	}
-	if cfg.SOCKS5 == "" {
+	/*	if cfg.SOCKS5 == "" {
 		cfg.SOCKS5 = "127.0.0.1:2080"
-	}
+	}*/
 
 	return cfg
 }
