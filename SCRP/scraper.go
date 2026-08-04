@@ -70,7 +70,7 @@ func Monitor(browser *Browser, cfg Config, tel *TelegramClient, interval time.Du
 				log.Printf("Monitor: SignAll ошибка: %v", err)
 			} else {
 				log.Println("Monitor: SignAll завершено")
-				tel.Sendf("Monitor: SignAll завершено")
+				//tel.Sendf("Monitor: SignAll завершено")
 			}
 		}
 	}
