@@ -3,11 +3,19 @@ package SCRP
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
 	"github.com/chromedp/chromedp"
 )
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 func NavigateToLogin_old(ctx context.Context) error {
 	if err := chromedp.Run(ctx,
@@ -90,8 +98,9 @@ func Login(ctx context.Context, certUser string) error {
 	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf2, 90)); err == nil {
 		os.WriteFile("/tmp/opencode/after_cert_click.png", buf2, 0644)
 	}
+	log.Printf("Login: after cert click page text: %q", PageText(ctx)[:min(800, len(PageText(ctx)))])
 
-	if err := ClickElement(ctx, certUser); err != nil {
+	if err := ClickElementContains(ctx, certUser); err != nil {
 		return fmt.Errorf("click %s: %w", certUser, err)
 	}
 

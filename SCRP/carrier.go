@@ -13,9 +13,12 @@ import (
 func NavigateToCarrier(ctx context.Context) error {
 	var url string
 	chromedp.Run(ctx, chromedp.Location(&url))
+	log.Printf("NavigateToCarrier: enter url=%s", url)
+	takeScreenshot(ctx, "nav_carrier_enter")
 
 	if strings.Contains(url, "/carrier/") {
-		return nil
+		log.Println("NavigateToCarrier: already on carrier page")
+		return waitForTableRows(ctx)
 	}
 
 	for i := 0; i < 30; i++ {
@@ -32,11 +35,14 @@ func NavigateToCarrier(ctx context.Context) error {
 				return 'not found';
 			})()`, &result))
 		if result == "clicked" {
+			log.Println("NavigateToCarrier: clicked Перевозчик")
+			takeScreenshot(ctx, "nav_carrier_clicked")
 			return waitForTableRows(ctx)
 		}
 		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
 	}
 
+	takeScreenshot(ctx, "nav_carrier_no_button")
 	return fmt.Errorf("Перевозчик button not found after 30s")
 }
 
@@ -60,10 +66,26 @@ func ParseDeliveryNotes(ctx context.Context) ([]DeliveryNote, error) {
 		return nil, err
 	}
 
+	var url string
+	chromedp.Run(ctx, chromedp.Location(&url))
+
 	var rowCount int
 	chromedp.Run(ctx, chromedp.Evaluate(
 		`document.querySelectorAll('[data-tid="TableRow"]').length`, &rowCount))
-	log.Printf("ParseDeliveryRows: TableRowcount = %d", rowCount)
+	log.Printf("ParseDeliveryRows: TableRowcount = %d url=%s", rowCount, url)
+	takeScreenshot(ctx, "parse_carrier_table")
+
+	// Диагностика: дамп содержимого строк (что за строка без WaybillNumber).
+	var dump string
+	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var rows = document.querySelectorAll('[data-tid="TableRow"]');
+		var out = [];
+		for(var i=0;i<rows.length;i++){
+			out.push('row'+i+': ['+rows[i].innerText.replace(/\s+/g,' ').trim().slice(0,160)+']');
+		}
+		return out.join(' | ');
+	})()`, &dump))
+	log.Printf("ParseDeliveryRows dump: %s", dump)
 
 	var data []DeliveryNote
 	err := chromedp.Run(ctx, chromedp.Evaluate(`(function(){
