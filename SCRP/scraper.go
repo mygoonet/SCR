@@ -90,6 +90,11 @@ func SignSession(browser *Browser, cfg Config, numbers []string) error {
 }
 
 func initSession(ctx context.Context, cfg Config) error {
+	// Кэш отключаем один раз на всю сессию и больше не включаем.
+	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return network.SetCacheDisabled(true).Do(ctx)
+	}))
+
 	if err := NavigateToLogin(ctx); err != nil {
 		return fmt.Errorf("navigate: %w", err)
 	}
@@ -121,7 +126,14 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
 		signed := false
 		for attempt := 1; attempt <= 3; attempt++ {
 			log.Printf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
-			if err := SignDeliveryNote(ctx, n.Number, certUser); err != nil {
+
+			// Жёсткий таймаут на всю попытку подписания — если
+			// DevTools-сессия зависнет (нативный диалог криптоплагина),
+			// цикл подписания не встанет навсегда.
+			signCtx, signCancel := context.WithTimeout(ctx, 3*time.Minute)
+			err := SignDeliveryNote(signCtx, n.Number, certUser)
+			signCancel()
+			if err != nil {
 				log.Printf(">>> Ошибка подписания %s: %v", n.Number, err)
 				if firstErr == nil {
 					firstErr = err
@@ -171,14 +183,13 @@ func closePopups(ctx context.Context) {
 }
 
 func reloadNoCache(ctx context.Context) {
+	// Кэш уже отключён навсегда в initSession и chrome flags,
+	// здесь просто перезагружаем страницу — кэш не включаем обратно.
 	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return network.SetCacheDisabled(true).Do(ctx)
 	}))
 	chromedp.Run(ctx, chromedp.Reload())
 	chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
-	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		return network.SetCacheDisabled(false).Do(ctx)
-	}))
 }
 
 func countdownAnnouncer(ctx context.Context, interval time.Duration, resetCh chan struct{}) {

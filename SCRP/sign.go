@@ -15,27 +15,44 @@ import (
 // clickAtCenter ищет элемент JS-выражением (должно вернуть элемент или null)
 // и кликает по его центру реальной мышью — React-меню Контура не реагирует
 // на синтетический el.click().
+//
+// Опрашивает до 10 секунд: элемент может появиться в DOM раньше, чем
+// отрисуется (getBoundingClientRect()=0). Раньше клик падал с
+// "element not found or invisible" на первой попытке.
 func clickAtCenter(ctx context.Context, findJS string) error {
-	var posJSON string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(){
-		var el = %s;
-		if(!el) return JSON.stringify({ok:false});
-		var r = el.getBoundingClientRect();
-		if(r.width === 0 || r.height === 0) return JSON.stringify({ok:false});
-		return JSON.stringify({ok:true, cx:r.left+r.width/2, cy:r.top+r.height/2});
-	})()`, findJS), &posJSON)); err != nil {
-		return err
+	const pollTimeout = 10 * time.Second
+	deadline := time.Now().Add(pollTimeout)
+	for {
+		var posJSON string
+		if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(){
+			var el = %s;
+			if(!el) return JSON.stringify({ok:false});
+			var r = el.getBoundingClientRect();
+			if(r.width === 0 || r.height === 0) return JSON.stringify({ok:false});
+			return JSON.stringify({ok:true, cx:r.left+r.width/2, cy:r.top+r.height/2});
+		})()`, findJS), &posJSON)); err != nil {
+			// Если контекст отменён (таймаут) — выходим сразу.
+			if ctx.Err() != nil {
+				return err
+			}
+		} else {
+			var pos struct {
+				Ok bool    `json:"ok"`
+				CX float64 `json:"cx"`
+				CY float64 `json:"cy"`
+			}
+			json.Unmarshal([]byte(posJSON), &pos)
+			if pos.Ok {
+				return chromedp.Run(ctx, chromedp.MouseClickXY(pos.CX, pos.CY))
+			}
+		}
+
+		if time.Now().After(deadline) {
+			break
+		}
+		chromedp.Run(ctx, chromedp.Sleep(300*time.Millisecond))
 	}
-	var pos struct {
-		Ok bool    `json:"ok"`
-		CX float64 `json:"cx"`
-		CY float64 `json:"cy"`
-	}
-	json.Unmarshal([]byte(posJSON), &pos)
-	if !pos.Ok {
-		return fmt.Errorf("element not found or invisible: %s", findJS)
-	}
-	return chromedp.Run(ctx, chromedp.MouseClickXY(pos.CX, pos.CY))
+	return fmt.Errorf("element not found or invisible (polled %s): %s", pollTimeout, findJS)
 }
 
 // waitForJS ждёт, пока JS-условие станет true.

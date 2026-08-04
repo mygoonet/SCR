@@ -40,6 +40,11 @@ func buildChromeOpts(cfg Config) []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-features", "Translate"),
 		chromedp.Flag("window-size", "1920,1080"),
 		chromedp.Flag("user-data-dir", cfg.UserDataDir),
+		// Кэш отключён навсегда — свежий DOM на каждой перезагрузке,
+		// меньше гонок вида "элемент есть, но невидим".
+		chromedp.Flag("disk-cache-size", 0),
+		chromedp.Flag("disable-application-cache", true),
+		chromedp.Flag("disable-cache", true),
 	}
 }
 
