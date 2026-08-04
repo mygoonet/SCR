@@ -128,6 +128,15 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	// 2. Пункт "Подписать без подписи водителя"
 	signItemJS := `document.querySelector('[data-tid="Popup__root"] [data-tid="SignWithoutDriverSignature"]') !== null`
 	if err := waitForJS(ctx, signItemJS, 10*time.Second); err != nil {
+		// Диагностика: дамп содержимого открытого попапа и всех Popup-элементов,
+		// чтобы понять, какие пункты реально в меню.
+		var popupDump string
+		chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+			var p = document.querySelector('[data-tid="Popup__root"]');
+			if(!p) return 'NO Popup__root';
+			return 'POPUP: '+p.innerText.replace(/\s+/g,' ').trim().slice(0,200);
+		})()`, &popupDump))
+		log.Printf("SIGN-DEBUG %s: signItem wait failed. %s", number, popupDump)
 		return fmt.Errorf("sign menu item: %w", err)
 	}
 	takeScreenshot(ctx, number+"_3_sign_item")
