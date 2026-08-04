@@ -6,12 +6,11 @@ import (
 	"log"
 	"time"
 
-
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
-func Monitor(browser *Browser, cfg Config, interval time.Duration) {
+func Monitor(browser *Browser, cfg Config, tel *TelegramClient, interval time.Duration) {
 	session := browser.NewSession()
 	defer session.Close()
 
@@ -33,7 +32,7 @@ func Monitor(browser *Browser, cfg Config, interval time.Duration) {
 			log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
 		}
 		if len(notes) > 0 {
-			if err := signAll(ctx, cfg.CertUser, notes); err != nil {
+			if err := signAll(ctx, cfg.CertUser, notes, tel); err != nil {
 				log.Printf("Monitor: SignAll ошибка: %v", err)
 			} else {
 				log.Println("Monitor: SignAll завершено")
@@ -63,11 +62,13 @@ func Monitor(browser *Browser, cfg Config, interval time.Duration) {
 		}
 
 		if len(notes) > 0 {
-			if err := signAll(ctx, cfg.CertUser, notes); err != nil {
+			if err := signAll(ctx, cfg.CertUser, notes, tel); err != nil {
 				log.Printf("Monitor: SignAll ошибка: %v", err)
 			} else {
 				log.Println("Monitor: SignAll завершено")
-				//tel.Sendf("Monitor: SignAll завершено")
+				if tel != nil {
+					tel.Sendf("Monitor: SignAll завершено")
+				}
 			}
 		}
 	}
@@ -88,7 +89,7 @@ func SignSession(browser *Browser, cfg Config, numbers []string) error {
 		notes = append(notes, DeliveryNote{Number: num})
 	}
 
-	return signAll(ctx, cfg.CertUser, notes)
+	return signAll(ctx, cfg.CertUser, notes, nil)
 }
 
 func initSession(ctx context.Context, cfg Config) error {
@@ -118,7 +119,7 @@ var skipNumbers = map[string]bool{
 	"000000420": true,
 }
 
-func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
+func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient) error {
 	var firstErr error
 	for _, n := range notes {
 		if skipNumbers[n.Number] {
@@ -128,6 +129,9 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
 		signed := false
 		for attempt := 1; attempt <= 3; attempt++ {
 			log.Printf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
+			if tel != nil {
+				tel.Sendf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
+			}
 
 			// Жёсткий таймаут на всю попытку подписания — если
 			// DevTools-сессия зависнет (нативный диалог криптоплагина),
@@ -146,6 +150,9 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote) error {
 				continue
 			}
 			log.Printf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
+			if tel != nil {
+				tel.Sendf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
+			}
 			closePopups(ctx)
 			chromedp.Run(ctx, chromedp.Sleep(5*time.Second))
 			reloadNoCache(ctx)
