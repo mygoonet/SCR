@@ -48,6 +48,8 @@ func NavigateToLogin_old(ctx context.Context) error {
 }
 
 func NavigateToLogin(ctx context.Context) error {
+
+	takeScreenshot(ctx, "start_init_cert")
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate("https://logist.kontur.ru/box-selection"),
 

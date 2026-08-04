@@ -97,10 +97,11 @@ func initSession(ctx context.Context, cfg Config) error {
 	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return network.SetCacheDisabled(true).Do(ctx)
 	}))
-
+	takeScreenshot(ctx, "start_init_cert")
 	if err := NavigateToLogin(ctx); err != nil {
 		return fmt.Errorf("navigate: %w", err)
 	}
+
 	DismissCookieBanner(ctx)
 
 	if ElementExists(ctx, "Сертификат") {
@@ -160,7 +161,7 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *Te
 			}
 			closePopups(ctx)
 			chromedp.Run(ctx, chromedp.Sleep(5*time.Second))
-			reloadNoCache(ctx)
+			//reloadNoCache(ctx)
 			waitForTableRows(ctx)
 			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
 			refreshed, err := fetchNotes(ctx)
