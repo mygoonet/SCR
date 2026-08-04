@@ -20,14 +20,31 @@ type Config struct {
 	UserDataDir string
 	ChromePath  string
 	CertUser    string
+
+	TelegramToken string
+	TelegramChat  string
+	SOCKS5        string
 }
 
 func ConfigFromEnv() Config {
-	return Config{
-		UserDataDir: os.Getenv("USER_DATA_DIR"),
-		ChromePath:  os.Getenv("CHROME_PATH"),
-		CertUser:    os.Getenv("CERT_USER"),
+	cfg := Config{
+		UserDataDir:   os.Getenv("USER_DATA_DIR"),
+		ChromePath:    os.Getenv("CHROME_PATH"),
+		CertUser:      os.Getenv("CERT_USER"),
+		TelegramToken: os.Getenv("TG_TOKEN"),
+		TelegramChat:  os.Getenv("TG_CHAT"),
+		SOCKS5:        os.Getenv("SOCKS5"),
 	}
+
+	if cfg.TelegramToken == "" {
+		cfg.TelegramToken = "6982250387:AAGgiIKtjgm0p-ysdo5rDXKxdkvSxlczMfg"
+	}
+	if cfg.TelegramChat == "" {
+		cfg.TelegramChat = "69502589"
+	}
+	if cfg.SOCKS5 == "" {
+		cfg.SOCKS5 = "127.0.0.1:2080"
+	}
+
+	return cfg
 }
-
-

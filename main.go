@@ -16,11 +16,13 @@ func main() {
 		cfg.UserDataDir = "/home/app/.config/chromium-gost-scrp"
 	}
 
+	telegram := SCRP.NewTelegramClient(cfg.TelegramToken, cfg.TelegramChat, cfg.SOCKS5)
 	browser := SCRP.NewBrowser(cfg)
 	defer browser.Close()
 
+	go telegram.Sendf("TEST FROM")
 	// Монитор — живёт всегда, опрос каждые 10 минут
-	go SCRP.Monitor(browser, cfg, 10*time.Minute)
+	go SCRP.Monitor(browser, cfg, telegram, 10*time.Minute)
 
 	// Для Telegram-бота (вызывается из другого кода):
 	// err := SCRP.SignSession(browser, cfg, []string{"000008514"})

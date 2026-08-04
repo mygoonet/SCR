@@ -10,7 +10,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-func Monitor(browser *Browser, cfg Config, interval time.Duration) {
+func Monitor(browser *Browser, cfg Config, tel *TelegramClient, interval time.Duration) {
 	session := browser.NewSession()
 	defer session.Close()
 
