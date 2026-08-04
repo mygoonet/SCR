@@ -72,25 +72,23 @@ func waitForJS(ctx context.Context, js string, timeout time.Duration) error {
 }
 
 // openRowMenu открывает меню "три точки" в строке накладной с номером number.
+// Кликаем реальной мышью по центру кнопки — синтетический btn.click()
+// не триггерит React-обработчик Контура, поэтому пункт
+// "Подписать без подписи водителя" часто не появлялся на первой попытке.
 func openRowMenu(ctx context.Context, number string) error {
-	var res string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(num){
+	btnJS := fmt.Sprintf(`(function(num){
 		var rows = document.querySelectorAll('[data-tid="TableRow"]');
 		for(var i=0;i<rows.length;i++){
 			var numEl = rows[i].querySelector('[data-tid="WaybillNumber"]');
 			if(numEl && numEl.textContent.trim() === num){
 				var btn = rows[i].querySelector('[data-tid="RowActionsButton"] button[aria-controls*="Popup"], [data-tid="RowActionsButton"] button');
-				if(!btn) return 'no menu button';
-				btn.click();
-				return 'ok';
+				return btn || null;
 			}
 		}
-		return 'not found';
-	})(%q)`, number), &res)); err != nil {
-		return err
-	}
-	if res != "ok" {
-		return fmt.Errorf("waybill %q: %s", number, res)
+		return null;
+	})(%q)`, number)
+	if err := clickAtCenter(ctx, btnJS); err != nil {
+		return fmt.Errorf("waybill %q: open menu: %w", number, err)
 	}
 	return nil
 }
