@@ -47,13 +47,30 @@ func NavigateToCarrier(ctx context.Context) error {
 }
 
 func waitForTableRows(ctx context.Context) error {
+	// Ждём именно реальные строки накладных (с WaybillNumber), а не
+	// плейсхолдер "Накладные не найдены", который сам имеет data-tid="TableRow"
+	// и заставлял парсить пустую таблицу до загрузки данных.
 	for i := 0; i < 30; i++ {
 		var n int
 		if err := chromedp.Run(ctx, chromedp.Evaluate(
-			`document.querySelectorAll('[data-tid="TableRow"]').length`, &n)); err != nil {
+			`document.querySelectorAll('[data-tid="TableRow"] [data-tid="WaybillNumber"]').length`, &n)); err != nil {
 			return err
 		}
 		if n > 0 {
+			return nil
+		}
+		// Нет ни одной реальной строки — но, возможно, это честное "пусто".
+		// Проверяем признак пустого состояния и выходим без ошибки.
+		var empty bool
+		chromedp.Run(ctx, chromedp.Evaluate(
+			`(function(){
+				var rows = document.querySelectorAll('[data-tid="TableRow"]');
+				for(var i=0;i<rows.length;i++){
+					if(rows[i].innerText.indexOf('Накладные не найдены') !== -1) return true;
+				}
+				return false;
+			})()`, &empty))
+		if empty {
 			return nil
 		}
 		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
@@ -71,8 +88,9 @@ func ParseDeliveryNotes(ctx context.Context) ([]DeliveryNote, error) {
 
 	var rowCount int
 	chromedp.Run(ctx, chromedp.Evaluate(
-		`document.querySelectorAll('[data-tid="TableRow"]').length`, &rowCount))
-	log.Printf("ParseDeliveryRows: TableRowcount = %d url=%s", rowCount, url)
+		`document.querySelectorAll('[data-tid="TableRow"] [data-tid="WaybillNumber"]').length`, &rowCount))
+	log.Printf("ParseDeliveryRows: waybill rows = %d url=%s", rowCount, url)
+	chromedp.Sleep(600 * time.Second)
 	takeScreenshot(ctx, "parse_carrier_table")
 
 	// Диагностика: дамп содержимого строк (что за строка без WaybillNumber).
