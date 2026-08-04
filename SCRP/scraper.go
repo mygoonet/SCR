@@ -104,14 +104,19 @@ func initSession(ctx context.Context, cfg Config) error {
 	DismissCookieBanner(ctx)
 
 	if ElementExists(ctx, "Сертификат") {
+		log.Println("initSession: found Сертификат, логинюсь")
 		if err := Login(ctx, cfg.CertUser); err != nil {
 			return fmt.Errorf("login: %w", err)
 		}
+		log.Println("initSession: login OK")
+	} else {
+		log.Println("initSession: already logged in")
 	}
 
 	if err := NavigateToCarrier(ctx); err != nil {
 		return fmt.Errorf("carrier: %w", err)
 	}
+	log.Println("initSession: carrier OK")
 	return nil
 }
 

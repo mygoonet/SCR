@@ -21,8 +21,17 @@ func main() {
 	defer browser.Close()
 
 	go telegram.Sendf("TEST FROM SCRAPPER")
-	// Монитор — живёт всегда, опрос каждые 10 минут
-	go SCRP.Monitor(browser, cfg, telegram, 10*time.Minute)
+	// Монитор — живёт всегда, опрос каждые 10 минут.
+	// recover ловит панику из chromedp/ плагина, чтобы процесс не падал
+	// с кодом 2 без следа в логах.
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("!!! Monitor panic (recovered): %v", r)
+			}
+		}()
+		SCRP.Monitor(browser, cfg, telegram, 10*time.Minute)
+	}()
 
 	// Для Telegram-бота (вызывается из другого кода):
 	// err := SCRP.SignSession(browser, cfg, []string{"000008514"})
