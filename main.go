@@ -8,6 +8,12 @@ import (
 )
 
 func main() {
+	loc, err := time.LoadLocation("Asia/Irkutsk")
+	if err != nil {
+		log.Fatalf("load location: %v", err)
+	}
+	time.Local = loc
+
 	cfg := SCRP.ConfigFromEnv()
 
 	if cfg.ChromePath == "" || cfg.CertUser == "" {
