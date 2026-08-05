@@ -21,19 +21,33 @@ func main() {
 	browser := SCRP.NewBrowser(cfg)
 	defer browser.Close()
 
-	Layout := ("2006-01-02 15:04:05")
+	cmdCh := make(chan SCRP.MonitorCmd)
+
+	Layout := "2006-01-02 15:04:05"
 	t := fmt.Sprintf("%s", time.Now().Format(Layout))
+
 	go telegram.Sendf("scraper in started - %s", t)
-	// Монитор — живёт всегда, опрос каждые 10 минут.
-	// recover ловит панику из chromedp/ плагина, чтобы процесс не падал
-	// с кодом 2 без следа в логах.
+
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("!!! Monitor panic (recovered): %v", r)
 			}
 		}()
-		SCRP.Monitor(browser, cfg, telegram, 10*time.Minute)
+		SCRP.Monitor(browser, cfg, telegram, cmdCh)
+	}()
+
+	// TEST: управление монитором через канал.
+
+	cmdCh <- SCRP.MonitorCmd{Interval: 1 * time.Minute}
+	cmdCh <- SCRP.MonitorCmd{AutoSign: new(false)}
+
+	go func() {
+
+		time.Sleep(4 * time.Minute)
+		cmdCh <- SCRP.MonitorCmd{AutoSign: new(true)}
+		time.Sleep(6 * time.Minute)
+		cmdCh <- SCRP.MonitorCmd{AutoSign: new(false)}
 	}()
 
 	// Для Telegram-бота (вызывается из другого кода):
@@ -42,3 +56,5 @@ func main() {
 
 	select {}
 }
+
+//func boolPtr(b bool) *bool { return &b }

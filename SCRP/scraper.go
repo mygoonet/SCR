@@ -4,13 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
-func Monitor(browser *Browser, cfg Config, tel *TelegramClient, interval time.Duration) {
+type MonitorCmd struct {
+	Interval time.Duration // <=0 = не менять
+	AutoSign *bool         // nil = не менять
+}
+
+func Monitor(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan MonitorCmd) {
 	session := browser.NewSession()
 	defer session.Close()
 
@@ -21,57 +27,83 @@ func Monitor(browser *Browser, cfg Config, tel *TelegramClient, interval time.Du
 		return
 	}
 
-	log.Println("Monitor запущен. Тикер:", interval)
+	interval := 10 * time.Minute
+	autoSign := true
 
-	notes, err := fetchNotes(ctx)
-	if err != nil {
-		log.Printf("Monitor: ошибка получения накладных: %v", err)
-	} else {
-		log.Printf("Monitor: накладные (%d):", len(notes))
-		for _, n := range notes {
-			log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
-		}
-		if len(notes) > 0 {
-			if err := signAll(ctx, cfg.CertUser, notes, tel); err != nil {
-				log.Printf("Monitor: SignAll ошибка: %v", err)
-			} else {
-				log.Println("Monitor: SignAll завершено")
-			}
-		}
-	}
+	log.Println("Monitor запущен. Тикер:", interval)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	resetCh := make(chan struct{}, 1)
-	go countdownAnnouncer(ctx, interval, resetCh)
+	stopAnnouncer := startAnnouncer(ctx, interval, resetCh)
 	resetCh <- struct{}{}
 
-	for range ticker.C {
-		resetCh <- struct{}{}
+	for {
+		select {
+		case cmd, ok := <-cmdCh:
+			if !ok {
+				log.Println("Monitor: канал управления закрыт, завершаюсь")
+				return
+			}
+			if cmd.Interval > 0 {
+				interval = cmd.Interval
+				ticker.Reset(interval)
+				stopAnnouncer()
+				stopAnnouncer = startAnnouncer(ctx, interval, resetCh)
+				resetCh <- struct{}{}
+			}
+			if cmd.AutoSign != nil {
+				autoSign = *cmd.AutoSign
+			}
+			log.Printf("Monitor: параметры обновлены (interval=%s, autosign=%v)", interval, autoSign)
+		case <-ticker.C:
+			resetCh <- struct{}{}
 
-		notes, err := fetchNotes(ctx)
-		if err != nil {
-			log.Printf("Monitor: ошибка получения накладных: %v", err)
-			continue
-		}
+			notes, err := fetchNotes(ctx)
+			if err != nil {
+				log.Printf("Monitor: ошибка получения накладных: %v", err)
+				continue
+			}
 
-		log.Printf("Monitor: накладные (%d):", len(notes))
-		for _, n := range notes {
-			log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
-		}
+			log.Printf("Monitor: накладные (%d):", len(notes))
+			for _, n := range notes {
+				log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
+			}
 
-		if len(notes) > 0 {
-			if err := signAll(ctx, cfg.CertUser, notes, tel); err != nil {
-				log.Printf("Monitor: SignAll ошибка: %v", err)
-			} else {
-				log.Println("Monitor: SignAll завершено")
+			todo := signableNotes(notes)
+			if len(todo) > 0 {
 				if tel != nil {
-					tel.Sendf("Monitor: SignAll завершено")
+					nums := make([]string, 0, len(todo))
+					for _, n := range todo {
+						nums = append(nums, n.Number)
+					}
+					tel.Sendf("ВНИМАНИЕ: накладные на подпись (%d): %v", len(todo), nums)
+				}
+			}
+
+			if autoSign && len(todo) > 0 {
+				if err := signAll(ctx, cfg.CertUser, todo, tel); err != nil {
+					log.Printf("Monitor: SignAll ошибка: %v", err)
+				} else {
+					log.Println("Monitor: SignAll завершено")
+					if tel != nil {
+						tel.Sendf("Monitor: SignAll завершено")
+					}
 				}
 			}
 		}
 	}
+}
+
+func signableNotes(notes []DeliveryNote) []DeliveryNote {
+	var out []DeliveryNote
+	for _, n := range notes {
+		if n.Number != "" && !skipNumbers[n.Number] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func SignSession(browser *Browser, cfg Config, numbers []string) error {
@@ -127,7 +159,7 @@ var skipNumbers = map[string]bool{
 	"000010270": true,
 	"000010269": true,
 
-	"000000420": true, //<--- dont remove//
+	//"000000420": true, //<--- dont remove//
 }
 
 func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient) error {
@@ -228,12 +260,24 @@ func reloadNoCache(ctx context.Context) {
 	chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
 }
 
-func countdownAnnouncer(ctx context.Context, interval time.Duration, resetCh chan struct{}) {
+func startAnnouncer(ctx context.Context, interval time.Duration, resetCh chan struct{}) (stop func()) {
+	stopCh := make(chan struct{})
+	var once sync.Once
+	stop = func() {
+		once.Do(func() { close(stopCh) })
+	}
+	go countdownAnnouncer(ctx, interval, resetCh, stopCh)
+	return stop
+}
+
+func countdownAnnouncer(ctx context.Context, interval time.Duration, resetCh chan struct{}, stopCh chan struct{}) {
 	minutes := int(interval.Minutes())
 	for {
 		for m := minutes; m > 0; m-- {
 			select {
 			case <-ctx.Done():
+				return
+			case <-stopCh:
 				return
 			case <-resetCh:
 				log.Println("⏳ Обратный отсчёт перезапущен")
