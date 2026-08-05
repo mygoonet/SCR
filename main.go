@@ -2,6 +2,7 @@ package main
 
 import (
 	"SCR/SCRP"
+	"fmt"
 	"log"
 	"time"
 )
@@ -20,7 +21,9 @@ func main() {
 	browser := SCRP.NewBrowser(cfg)
 	defer browser.Close()
 
-	go telegram.Sendf("TEST FROM SCRAPPER")
+	Layout := ("2006-01-02 15:04:05")
+	t := fmt.Sprintf("%s", time.Now().Format(Layout))
+	go telegram.Sendf("scraper in started - %s", t)
 	// Монитор — живёт всегда, опрос каждые 10 минут.
 	// recover ловит панику из chromedp/ плагина, чтобы процесс не падал
 	// с кодом 2 без следа в логах.
