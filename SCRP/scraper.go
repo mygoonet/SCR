@@ -159,7 +159,7 @@ var skipNumbers = map[string]bool{
 	/*"000010270": true,*/
 	"000010269": true,
 
-	//"000000420": true, //<--- dont remove//
+	"000000420": true, //<--- dont remove//
 }
 
 func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient) error {
