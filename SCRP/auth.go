@@ -87,20 +87,22 @@ func Login(ctx context.Context, certUser string) error {
 	if err := ClickElement(ctx, "Сертификат"); err != nil {
 		return fmt.Errorf("click Сертификат: %w", err)
 	}
-	chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
 
-	if err := chromedp.Run(ctx,
-		chromedp.WaitReady(`body`),
-		chromedp.Sleep(5*time.Second),
-	); err != nil {
-		return fmt.Errorf("wait auth page: %w", err)
+	// Список сертификатов грузится не сразу — ждём появления нужного (до 30с).
+	deadline := time.Now().Add(30 * time.Second)
+	for !ElementExistsContains(ctx, certUser) {
+		if time.Now().After(deadline) {
+			log.Printf("Login: page text: %q", PageText(ctx)[:min(800, len(PageText(ctx)))])
+			return fmt.Errorf("wait %s: timeout", certUser)
+		}
+		time.Sleep(1 * time.Second)
 	}
+	chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
 
 	var buf2 []byte
 	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf2, 90)); err == nil {
 		os.WriteFile("/tmp/opencode/after_cert_click.png", buf2, 0644)
 	}
-	log.Printf("Login: after cert click page text: %q", PageText(ctx)[:min(800, len(PageText(ctx)))])
 
 	if err := ClickElementContains(ctx, certUser); err != nil {
 		return fmt.Errorf("click %s: %w", certUser, err)
