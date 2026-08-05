@@ -1,6 +1,7 @@
 .idea/
 .idea/**/*
 .proxyai/
+.env
 tmp/
 scraper/
 SCR
