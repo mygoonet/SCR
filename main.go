@@ -21,7 +21,9 @@ func main() {
 	browser := SCRP.NewBrowser(cfg)
 	defer browser.Close()
 
-	cmdCh := make(chan SCRP.MonitorCmd)
+	cmdCh := make(chan SCRP.MonitorCmd, 2)
+
+	// TEST: управление монитором через канал (до запуска — канал буферизован).
 
 	Layout := "2006-01-02 15:04:05"
 	t := fmt.Sprintf("%s", time.Now().Format(Layout))
@@ -34,20 +36,18 @@ func main() {
 				log.Printf("!!! Monitor panic (recovered): %v", r)
 			}
 		}()
-		SCRP.Monitor(browser, cfg, telegram, cmdCh)
+		SCRP.MonitorAPI(browser, cfg, telegram, cmdCh)
+
+		// Для автономного теста логин + запрос к API:
+		// SCRP.TestAPI(browser, cfg)
 	}()
-
-	// TEST: управление монитором через канал.
-
-	cmdCh <- SCRP.MonitorCmd{Interval: 1 * time.Minute}
-	cmdCh <- SCRP.MonitorCmd{AutoSign: new(false)}
 
 	go func() {
 
-		time.Sleep(4 * time.Minute)
-		cmdCh <- SCRP.MonitorCmd{AutoSign: new(true)}
-		time.Sleep(6 * time.Minute)
-		cmdCh <- SCRP.MonitorCmd{AutoSign: new(false)}
+		/*	time.Sleep(1 * time.Minute)
+			cmdCh <- SCRP.MonitorCmd{AutoSign: boolPtr(true)}
+			time.Sleep(3 * time.Minute)
+			cmdCh <- SCRP.MonitorCmd{AutoSign: boolPtr(false)}*/
 	}()
 
 	// Для Telegram-бота (вызывается из другого кода):
@@ -57,4 +57,4 @@ func main() {
 	select {}
 }
 
-//func boolPtr(b bool) *bool { return &b }
+func boolPtr(b bool) *bool { return &b }

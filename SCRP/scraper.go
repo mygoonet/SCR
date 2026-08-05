@@ -37,7 +37,7 @@ func Monitor(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan Mon
 
 	resetCh := make(chan struct{}, 1)
 	stopAnnouncer := startAnnouncer(ctx, interval, resetCh)
-	resetCh <- struct{}{}
+	announce(resetCh)
 
 	for {
 		select {
@@ -51,14 +51,14 @@ func Monitor(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan Mon
 				ticker.Reset(interval)
 				stopAnnouncer()
 				stopAnnouncer = startAnnouncer(ctx, interval, resetCh)
-				resetCh <- struct{}{}
+				announce(resetCh)
 			}
 			if cmd.AutoSign != nil {
 				autoSign = *cmd.AutoSign
 			}
 			log.Printf("Monitor: параметры обновлены (interval=%s, autosign=%v)", interval, autoSign)
 		case <-ticker.C:
-			resetCh <- struct{}{}
+			announce(resetCh)
 
 			notes, err := fetchNotes(ctx)
 			if err != nil {
@@ -155,8 +155,8 @@ func initSession(ctx context.Context, cfg Config) error {
 
 var skipNumbers = map[string]bool{
 
-	"000010271": true,
-	"000010270": true,
+	/*"000010271": true,*/
+	/*"000010270": true,*/
 	"000010269": true,
 
 	//"000000420": true, //<--- dont remove//
@@ -270,10 +270,39 @@ func startAnnouncer(ctx context.Context, interval time.Duration, resetCh chan st
 	return stop
 }
 
+// announce неблокирующе сбрасывает счётчик обратного отсчёта. Неблокирующий
+// send обязателен: при интервале < 1 мин announcer считает в секундах и может
+// не успевать читать канал, а блокирующий send навсегда застопорил бы монитор.
+func announce(resetCh chan struct{}) {
+	select {
+	case resetCh <- struct{}{}:
+	default:
+	}
+}
+
 func countdownAnnouncer(ctx context.Context, interval time.Duration, resetCh chan struct{}, stopCh chan struct{}) {
-	minutes := int(interval.Minutes())
+	if interval >= time.Minute {
+		minutes := int(interval.Minutes())
+		for {
+			for m := minutes; m > 0; m-- {
+				select {
+				case <-ctx.Done():
+					return
+				case <-stopCh:
+					return
+				case <-resetCh:
+					log.Println("⏳ Обратный отсчёт перезапущен")
+					m = minutes + 1
+				case <-time.After(time.Minute):
+					log.Printf("⏳ До следующего обновления: %d мин", m-1)
+				}
+			}
+		}
+	}
+
+	seconds := int(interval.Seconds())
 	for {
-		for m := minutes; m > 0; m-- {
+		for s := seconds; s > 0; s-- {
 			select {
 			case <-ctx.Done():
 				return
@@ -281,9 +310,9 @@ func countdownAnnouncer(ctx context.Context, interval time.Duration, resetCh cha
 				return
 			case <-resetCh:
 				log.Println("⏳ Обратный отсчёт перезапущен")
-				m = minutes + 1
-			case <-time.After(time.Minute):
-				log.Printf("⏳ До следующего обновления: %d мин", m-1)
+				s = seconds + 1
+			case <-time.After(time.Second):
+				log.Printf("⏳ До следующего обновления: %d сек", s-1)
 			}
 		}
 	}

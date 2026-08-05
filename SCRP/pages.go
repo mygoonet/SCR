@@ -14,7 +14,8 @@ func ClickElement(ctx context.Context, text string) error {
 		`(function(t){
 		var all = document.querySelectorAll('*');
 		for(var i=0;i<all.length;i++){
-			if(all[i].textContent.trim() === t){
+			var elText = all[i].textContent.replace(/\u00a0/g, ' ');
+			if(elText.trim() === t){
 				var el = all[i];
 				while(el && el.tagName !== 'A' && el.tagName !== 'BUTTON' && !el.onclick){
 					el = el.parentElement;
@@ -41,7 +42,7 @@ func ClickElementContains(ctx context.Context, text string) error {
 		`(function(t){
 		var all = document.querySelectorAll('*');
 		for(var i=0;i<all.length;i++){
-			if(all[i].textContent.includes(t)){
+			if(all[i].textContent.replace(/\u00a0/g, ' ').includes(t)){
 				var el = all[i];
 				while(el && el.tagName !== 'A' && el.tagName !== 'BUTTON' && !el.onclick){
 					el = el.parentElement;
@@ -68,7 +69,20 @@ func ElementExists(ctx context.Context, text string) bool {
 		`(function(t){
 		var all = document.querySelectorAll('*');
 		for(var i=0;i<all.length;i++){
-			if(all[i].textContent.trim() === t) return true;
+			if(all[i].textContent.replace(/\u00a0/g, ' ').trim() === t) return true;
+		}
+		return false;
+	})(%q)`, text), &exists))
+	return exists
+}
+
+func ElementExistsContains(ctx context.Context, text string) bool {
+	var exists bool
+	chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(
+		`(function(t){
+		var all = document.querySelectorAll('*');
+		for(var i=0;i<all.length;i++){
+			if(all[i].textContent.replace(/\u00a0/g, ' ').includes(t)) return true;
 		}
 		return false;
 	})(%q)`, text), &exists))
