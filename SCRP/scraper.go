@@ -122,7 +122,14 @@ func initSession(ctx context.Context, cfg Config) error {
 }
 
 var skipNumbers = map[string]bool{
-	"000000420": true,
+
+	"000010273": true,
+	"000010272": true,
+	"000010271": true,
+	"000010270": true,
+	"000010269": true,
+
+	"000000420": true, //<--- dont remove//
 }
 
 func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient) error {
@@ -160,27 +167,43 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *Te
 				tel.Sendf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
 			}
 			closePopups(ctx)
-			chromedp.Run(ctx, chromedp.Sleep(5*time.Second))
-			//reloadNoCache(ctx)
-			waitForTableRows(ctx)
-			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
-			refreshed, err := fetchNotes(ctx)
-			if err != nil {
-				log.Printf(">>> Ошибка обновления списка: %v", err)
-				break
-			}
-			still := false
-			for _, r := range refreshed {
-				if r.Number == n.Number {
-					still = true
+			// Серверный список обновляется с лагом — опрашиваем до 4 раз
+			// (по ~8с каждый), прежде чем решить что накладная ещё в списке.
+			signed = true
+			for check := 0; check < 4; check++ {
+				reloadNoCache(ctx)
+				waitForTableRows(ctx)
+				refreshed, err := fetchNotes(ctx)
+				if err != nil {
+					log.Printf(">>> Ошибка обновления списка: %v", err)
+					signed = false
 					break
 				}
+				still := false
+				for _, r := range refreshed {
+					if r.Number == n.Number {
+						still = true
+						break
+					}
+				}
+				if !still {
+					signed = true
+					break
+				}
+				log.Printf(">>> Накладная %s ещё в списке (проверка %d/4), жду...", n.Number, check+1)
+				chromedp.Run(ctx, chromedp.Sleep(10*time.Second))
+				signed = false
 			}
-			if !still {
-				signed = true
+			if signed {
 				break
 			}
-			log.Printf(">>> Накладная %s ещё в списке, повторяю...", n.Number)
+			log.Printf(">>> Накладная %s не пропала после 4 проверок, повторяю подписание...", n.Number)
+		}
+		if !signed {
+			log.Printf(">>> Накладная %s не подписана после 3 попыток", n.Number)
+		} else {
+			// Сбрасываем ошибку — по факту всё подписано.
+			firstErr = nil
 		}
 		if !signed {
 			log.Printf(">>> Накладная %s не подписана после 3 попыток", n.Number)
