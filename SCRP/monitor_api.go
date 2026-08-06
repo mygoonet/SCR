@@ -39,9 +39,12 @@ type apiTransportations struct {
 
 // pending хранит перехваченные (паузнутые в response-stage) запросы к
 // /transportations: RequestID -> true если это сам список.
+// pausedAt хранит время паузы каждого перехваченного запроса — чтобы из
+// карты можно было выбрать самый свежий, а не случайный.
 var (
 	pendingMu sync.Mutex
 	pending   = map[fetch.RequestID]bool{}
+	pausedAt  = map[fetch.RequestID]time.Time{}
 )
 
 // startTransportationsCapture включает fetch-домен и перехватывает в
@@ -52,6 +55,7 @@ var (
 func startTransportationsCapture(ctx context.Context) {
 	pendingMu.Lock()
 	pending = map[fetch.RequestID]bool{}
+	pausedAt = map[fetch.RequestID]time.Time{}
 	pendingMu.Unlock()
 
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
@@ -75,6 +79,7 @@ func startTransportationsCapture(ctx context.Context) {
 		}
 		pendingMu.Lock()
 		pending[e.RequestID] = isList
+		pausedAt[e.RequestID] = time.Now()
 		pendingMu.Unlock()
 	})
 }
@@ -92,6 +97,24 @@ func reloadNotesAPI(ctx context.Context) {
 // FetchNotesAPI получает список накладных, перехватив ответ SPA.
 // timeoutSec — сколько секунд ждём появления/тела ответа.
 func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) {
+	notes, err := fetchNotesAPICtx(ctx, timeoutSec)
+	if err != nil && strings.Contains(err.Error(), "Invalid InterceptionId") {
+		log.Printf("FetchNotesAPI: протухший перехват, повторяю (ретрая)...")
+		continuePaused(ctx)
+		notes, err = fetchNotesAPICtx(ctx, timeoutSec)
+	}
+	return notes, err
+}
+
+func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) {
+	// Сбрасываем перехваченные запросы перед перезагрузкой: навигация отменяет
+	// висевшие паузные запросы (их InterceptionId становится невалидным), и они
+	// не должны оставаться кандидатами на выборку.
+	pendingMu.Lock()
+	pending = map[fetch.RequestID]bool{}
+	pausedAt = map[fetch.RequestID]time.Time{}
+	pendingMu.Unlock()
+
 	reloadNotesAPI(ctx)
 
 	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
@@ -100,9 +123,20 @@ func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) 
 	var listID fetch.RequestID
 	for listID == "" && time.Now().Before(deadline) {
 		pendingMu.Lock()
+		var newest time.Time
 		for id, isList := range pending {
 			if isList {
-				listID = id
+				if listID == "" {
+					listID = id
+					newest = pausedAt[id]
+					continue
+				}
+				// Из карты берём самый свежий запрос: старые могли быть
+				// отменены навигацией (Invalid InterceptionId).
+				if pausedAt[id].After(newest) {
+					listID = id
+					newest = pausedAt[id]
+				}
 			}
 		}
 		pendingMu.Unlock()
@@ -167,11 +201,17 @@ func continuePaused(ctx context.Context) {
 		ids = append(ids, id)
 	}
 	pending = map[fetch.RequestID]bool{}
+	pausedAt = map[fetch.RequestID]time.Time{}
 	pendingMu.Unlock()
 
 	for _, id := range ids {
 		chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
-			return fetch.ContinueResponse(id).Do(c)
+			err := fetch.ContinueResponse(id).Do(c)
+			if err != nil && strings.Contains(err.Error(), "Invalid InterceptionId") {
+				// Запрос уже отменён навигацией — не страшно, остальные продолжаем.
+				return nil
+			}
+			return err
 		}))
 	}
 }
@@ -315,7 +355,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 	startTransportationsCapture(ctx)
 
-	interval := 180 * time.Second
+	interval := 20 * time.Second
 	autoSign := true
 	giveUp := map[string]bool{}
 
