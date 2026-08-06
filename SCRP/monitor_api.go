@@ -350,6 +350,9 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 	if err := initSession(ctx, cfg); err != nil {
 		log.Printf("MonitorAPI: init session: %v", err)
+		if tel != nil {
+			tel.Sendf("❌ MonitorAPI: init session: %v", err)
+		}
 		return
 	}
 
@@ -358,6 +361,9 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 	interval := 240 * time.Second
 	autoSign := true
 	giveUp := map[string]bool{}
+
+	fetchFails := 0
+	lastFetchAlert := time.Time{}
 
 	log.Println("MonitorAPI запущен. Тикер:", interval)
 
@@ -392,8 +398,14 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 			notes, err := FetchNotesAPI(ctx, 30)
 			if err != nil {
 				log.Printf("MonitorAPI: ошибка получения накладных: %v", err)
+				fetchFails++
+				if tel != nil && fetchFails >= 3 && time.Since(lastFetchAlert) >= 10*time.Minute {
+					lastFetchAlert = time.Now()
+					tel.Sendf("⚠️ Мониторинг: не получаю накладные %d раз подряд: %v", fetchFails, err)
+				}
 				continue
 			}
+			fetchFails = 0
 
 			log.Printf("MonitorAPI: накладные (%d):", len(notes))
 			for _, n := range notes {
@@ -434,6 +446,9 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 			if autoSign && len(todo) > 0 {
 				if err := signAllAPI(ctx, cfg.CertUser, todo, tel, giveUp); err != nil {
 					log.Printf("MonitorAPI: SignAll ошибка: %v", err)
+					if tel != nil {
+						tel.Sendf("❌ MonitorAPI: SignAll ошибка: %v", err)
+					}
 				} else {
 					log.Println("MonitorAPI: SignAll завершено")
 					if tel != nil {
