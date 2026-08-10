@@ -24,6 +24,7 @@ type Config struct {
 	TelegramToken string
 	TelegramChat  string
 	SOCKS5        string
+	WebAddr       string
 }
 
 func ConfigFromEnv() Config {
@@ -34,6 +35,7 @@ func ConfigFromEnv() Config {
 		TelegramToken: os.Getenv("TG_TOKEN"),
 		TelegramChat:  os.Getenv("TG_CHAT"),
 		SOCKS5:        os.Getenv("SOCKS5"),
+		WebAddr:       os.Getenv("WEB_ADDR"),
 	}
 
 	if cfg.TelegramToken == "" {
@@ -41,6 +43,9 @@ func ConfigFromEnv() Config {
 	}
 	if cfg.TelegramChat == "" {
 		cfg.TelegramChat = "69502589"
+	}
+	if cfg.WebAddr == "" {
+		cfg.WebAddr = ":2000"
 	}
 	/*if cfg.SOCKS5 == "" {
 		cfg.SOCKS5 = "127.0.0.1:2080"

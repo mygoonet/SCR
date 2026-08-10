@@ -129,10 +129,11 @@ func initSession(ctx context.Context, cfg Config) error {
 	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return network.SetCacheDisabled(true).Do(ctx)
 	}))
-	takeScreenshot(ctx, "start_init_cert")
+
 	if err := NavigateToLogin(ctx); err != nil {
 		return fmt.Errorf("navigate: %w", err)
 	}
+	//takeScreenshot(ctx, "start_init_cert")
 
 	DismissCookieBanner(ctx)
 
@@ -155,11 +156,16 @@ func initSession(ctx context.Context, cfg Config) error {
 
 var skipNumbers = map[string]bool{
 
-	/*"000010271": true,*/
-	/*"000010270": true,*/
-	"000010269": true,
+	"000011651": true,
+	"000011650": true,
+	"000011649": true,
+	"000011648": true,
+	"000011647": true,
+	"000011646": true,
+	"000011645": true,
 
-	"000000420": true, //<--- dont remove//
+	"000010269": true,
+	//"000000420": true, //<--- dont remove//
 }
 
 func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient) error {
@@ -169,9 +175,14 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *Te
 			log.Printf(">>> signAll: пропускаю %s (тестовая)", n.Number)
 			continue
 		}
+
+		nl := NewNoteLogger(n)
+		setActiveLogger(nl)
+		nl.Logf(">>> signAll: начинаю подписание %s", n.Number)
+
 		signed := false
 		for attempt := 1; attempt <= 3; attempt++ {
-			log.Printf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
+			nl.Logf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
 			if tel != nil {
 				tel.Sendf(">>> signAll: подписываю %s (попытка %d)...", n.Number, attempt)
 			}
@@ -183,7 +194,7 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *Te
 			err := SignDeliveryNote(signCtx, n.Number, certUser)
 			signCancel()
 			if err != nil {
-				log.Printf(">>> Ошибка подписания %s: %v", n.Number, err)
+				nl.Logf(">>> Ошибка подписания %s: %v", n.Number, err)
 				if firstErr == nil {
 					firstErr = err
 				}
@@ -192,7 +203,7 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *Te
 				waitForTableRows(ctx)
 				continue
 			}
-			log.Printf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
+			nl.Logf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
 			if tel != nil {
 				tel.Sendf(">>> Накладная %s подписана, жду обновления страницы...", n.Number)
 			}
@@ -205,7 +216,7 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *Te
 				waitForTableRows(ctx)
 				refreshed, err := fetchNotes(ctx)
 				if err != nil {
-					log.Printf(">>> Ошибка обновления списка: %v", err)
+					nl.Logf(">>> Ошибка обновления списка: %v", err)
 					signed = false
 					break
 				}
@@ -220,24 +231,25 @@ func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *Te
 					signed = true
 					break
 				}
-				log.Printf(">>> Накладная %s ещё в списке (проверка %d/4), жду...", n.Number, check+1)
+				nl.Logf(">>> Накладная %s ещё в списке (проверка %d/4), жду...", n.Number, check+1)
 				chromedp.Run(ctx, chromedp.Sleep(10*time.Second))
 				signed = false
 			}
 			if signed {
 				break
 			}
-			log.Printf(">>> Накладная %s не пропала после 4 проверок, повторяю подписание...", n.Number)
+			nl.Logf(">>> Накладная %s не пропала после 4 проверок, повторяю подписание...", n.Number)
 		}
 		if !signed {
-			log.Printf(">>> Накладная %s не подписана после 3 попыток", n.Number)
+			nl.SetStatus("failed", "не подписана после 3 попыток")
+			nl.Logf(">>> Накладная %s не подписана после 3 попыток", n.Number)
 		} else {
-			// Сбрасываем ошибку — по факту всё подписано.
+			nl.SetStatus("signed", "")
 			firstErr = nil
 		}
-		if !signed {
-			log.Printf(">>> Накладная %s не подписана после 3 попыток", n.Number)
-		}
+		nl.Logf(">>> signAll: закончена обработка %s", n.Number)
+		nl.Close()
+		setActiveLogger(nil)
 	}
 	return firstErr
 }

@@ -111,6 +111,17 @@ func takeScreenshot(ctx context.Context, name string) {
 		log.Printf("screenshot %s: %v", name, err)
 		return
 	}
+
+	// Если сейчас подписывается накладная — скриншот идёт в её папку
+	// (шаг подписания: 1_before, done, ...).
+	if l := getActiveLogger(); l != nil {
+		l.saveScreenshot(name, buf)
+		return
+	}
+
+	// Фоновый шаг сессии (логин/nav/таблица): в общую папку + в буфер,
+	// чтобы потом скопировать в папку каждой накладной.
+	captureFlowShot(name, buf)
 	path := filepath.Join(screenshotDir, name+".png")
 	if err := os.WriteFile(path, buf, 0644); err != nil {
 		log.Printf("save screenshot %s: %v", path, err)

@@ -27,6 +27,8 @@ func main() {
 	browser := SCRP.NewBrowser(cfg)
 	defer browser.Close()
 
+	go SCRP.StartWebServer(cfg.WebAddr)
+
 	cmdCh := make(chan SCRP.MonitorCmd, 2)
 
 	// TEST: управление монитором через канал (до запуска — канал буферизован).

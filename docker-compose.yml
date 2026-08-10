@@ -14,3 +14,5 @@ services:
     environment:
       - LD_LIBRARY_PATH=/opt/cprocsp/lib/amd64
     restart: unless-stopped
+    ports:
+      - "2000:2000"

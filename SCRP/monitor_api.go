@@ -274,9 +274,14 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 			log.Printf(">>> signAllAPI: пропускаю %s (не удалось подписать ранее)", n.Number)
 			continue
 		}
+
+		nl := NewNoteLogger(n)
+		setActiveLogger(nl)
+		nl.Logf(">>> signAllAPI: начинаю подписание %s", n.Number)
+
 		signed := false
 		for attempt := 1; attempt <= 3; attempt++ {
-			log.Printf(">>> signAllAPI: подписываю %s (попытка %d)...", n.Number, attempt)
+			nl.Logf(">>> signAllAPI: подписываю %s (попытка %d)...", n.Number, attempt)
 			if tel != nil {
 				tel.Sendf(">>> signAllAPI: подписываю %s (попытка %d)...", n.Number, attempt)
 			}
@@ -285,14 +290,14 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 			err := SignDeliveryNote(signCtx, n.Number, certUser)
 			signCancel()
 			if err != nil {
-				log.Printf(">>> Ошибка подписания %s: %v", n.Number, err)
+				nl.Logf(">>> Ошибка подписания %s: %v", n.Number, err)
 				if firstErr == nil {
 					firstErr = err
 				}
 				closePopups(ctx)
 				continue
 			}
-			log.Printf(">>> Накладная %s подписана, проверяю через API...", n.Number)
+			nl.Logf(">>> Накладная %s подписана, проверяю через API...", n.Number)
 			if tel != nil {
 				tel.Sendf(">>> Накладная %s подписана", n.Number)
 			}
@@ -304,7 +309,7 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 			for check := 0; check < 4; check++ {
 				refreshed, err := FetchNotesAPI(ctx, 20)
 				if err != nil {
-					log.Printf(">>> Ошибка обновления списка (API): %v", err)
+					nl.Logf(">>> Ошибка обновления списка (API): %v", err)
 					signed = false
 					break
 				}
@@ -319,25 +324,30 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 					signed = true
 					break
 				}
-				log.Printf(">>> Накладная %s ещё в списке (проверка %d/4), жду...", n.Number, check+1)
+				nl.Logf(">>> Накладная %s ещё в списке (проверка %d/4), жду...", n.Number, check+1)
 				chromedp.Run(ctx, chromedp.Sleep(10*time.Second))
 				signed = false
 			}
 			if signed {
 				break
 			}
-			log.Printf(">>> Накладная %s не пропала после 4 проверок, повторяю подписание...", n.Number)
+			nl.Logf(">>> Накладная %s не пропала после 4 проверок, повторяю подписание...", n.Number)
 		}
 		if !signed {
 			giveUp[n.Number] = true
-			log.Printf(">>> Накладная %s не подписана после 3 попыток — не смогу подписать, пропускаю до конца сессии", n.Number)
+			nl.SetStatus("failed", "не подписана после 3 попыток")
+			nl.Logf(">>> Накладная %s не подписана после 3 попыток — не смогу подписать, пропускаю до конца сессии", n.Number)
 			if tel != nil {
 				tel.Sendf(">>> Накладная %s не подписана после 3 попыток — не смогу подписать, пропускаю", n.Number)
 			}
 		} else {
+			nl.SetStatus("signed", "")
 			firstErr = nil
 			delete(giveUp, n.Number)
 		}
+		nl.Logf(">>> signAllAPI: закончена обработка %s", n.Number)
+		nl.Close()
+		setActiveLogger(nil)
 	}
 	return firstErr
 }
@@ -358,7 +368,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 	startTransportationsCapture(ctx)
 
-	interval := 360 * time.Second
+	interval := 30 * time.Second
 	autoSign := true
 	giveUp := map[string]bool{}
 

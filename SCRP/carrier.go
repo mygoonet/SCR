@@ -36,7 +36,7 @@ func NavigateToCarrier(ctx context.Context) error {
 			})()`, &result))
 		if result == "clicked" {
 			log.Println("NavigateToCarrier: clicked Перевозчик")
-			takeScreenshot(ctx, "nav_carrier_clicked")
+			//takeScreenshot(ctx, "nav_carrier_clicked")
 			return waitForTableRows(ctx)
 		}
 		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
