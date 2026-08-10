@@ -3,6 +3,7 @@ services:
     build: .
     env_file: .env
     volumes:
+      - ./screenshots:/screenshots
       - ./tmp:/tmp
       - /opt/chromium-gost:/opt/chromium-gost:ro
       - /opt/cprocsp:/opt/cprocsp:ro
