@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const timeLayout = "2006-01-02 15:04:05"
+
 // flowShots — буфер «фоновых» скриншотов сессии (логин/навигация/таблица),
 // сделанных ДО начала подписания. Когда для накладной создаётся NoteLogger,
 // весь буфер копируется в её папку — так в каждой накладной окажутся все
@@ -35,6 +37,7 @@ func captureFlowShot(name string, data []byte) {
 func currentFlowShots() []flowShot {
 	flowMu.Lock()
 	defer flowMu.Unlock()
+	// возвращаем копию среза, чтобы внешний код не мог модифицировать глобальный буфер
 	return append([]flowShot(nil), flowShots...)
 }
 
@@ -112,7 +115,14 @@ func (l *NoteLogger) Logf(format string, args ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {
-		fmt.Fprintf(l.file, "[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), msg)
+		if _, err := fmt.Fprintf(l.file, "[%s] %s\n", time.Now().Format(timeLayout), msg); err != nil {
+			log.Printf("NoteLogger %s: write note.txt: %v", l.Number, err)
+		} else {
+			// Попытка зафлашить данные на диск; если не поддерживается, логируем, но не прерываем работу
+			if err := l.file.Sync(); err != nil {
+				log.Printf("NoteLogger %s: sync note.txt: %v", l.Number, err)
+			}
+		}
 	}
 }
 
@@ -124,12 +134,17 @@ func (l *NoteLogger) SetStatus(status, errMsg string) {
 }
 
 func (l *NoteLogger) writeNoteJSON(n DeliveryNote, status, errMsg string) {
-	data, _ := json.MarshalIndent(NoteFileJSON{
+	f := NoteFileJSON{
 		DeliveryNote: n,
 		Status:       status,
 		Error:        errMsg,
-		UpdatedAt:    time.Now().Format("2006-01-02 15:04:05"),
-	}, "", "  ")
+		UpdatedAt:    time.Now().Format(timeLayout),
+	}
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		log.Printf("NoteLogger %s: marshal note.json: %v", l.Number, err)
+		return
+	}
 	if err := os.WriteFile(filepath.Join(l.Dir, "note.json"), data, 0644); err != nil {
 		log.Printf("NoteLogger %s: write note.json: %v", l.Number, err)
 	}
@@ -157,9 +172,11 @@ func (l *NoteLogger) Screenshot(ctx context.Context, name string) {
 
 func (l *NoteLogger) Close() {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.file != nil {
-		l.file.Close()
+		if err := l.file.Close(); err != nil {
+			log.Printf("NoteLogger %s: close note.txt: %v", l.Number, err)
+		}
 		l.file = nil
 	}
-	l.mu.Unlock()
 }
