@@ -163,6 +163,25 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	// 3. SidePage "Подписание накладной" -> кнопка "Подписать" в футере
 	sidePageJS := `document.querySelector('[data-tid="SidePageFooter__root"] [data-tid="Sign"]') !== null`
 	if err := waitForJS(ctx, sidePageJS, 15*time.Second); err != nil {
+		var dump string
+		chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+			var parts = [];
+			var sp = document.querySelector('[data-tid="SidePage__root"]');
+			parts.push('SidePage__root=' + (sp ? 'YES' : 'NO'));
+			var spf = document.querySelector('[data-tid="SidePageFooter__root"]');
+			parts.push('SidePageFooter__root=' + (spf ? 'YES' : 'NO'));
+			var allSide = document.querySelectorAll('[data-tid*="SidePage"]');
+			parts.push('SidePage* count=' + allSide.length);
+			for(var i=0;i<allSide.length && i<5;i++) parts.push('  '+allSide[i].getAttribute('data-tid'));
+			var popups = document.querySelectorAll('[data-tid="Popup__root"]');
+			parts.push('Popup__root count=' + popups.length);
+			var modals = document.querySelectorAll('[data-tid*="Modal"], [role="dialog"]');
+			parts.push('Modal/dialog count=' + modals.length);
+			parts.push('bodyText='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,500));
+			return parts.join('\n');
+		})()`, &dump))
+		log.Printf("SIGN-DEBUG %s: sidePage timeout. %s", number, dump)
+		takeScreenshot(ctx, number+"_sidepage_fail")
 		return fmt.Errorf("sign side page: %w", err)
 	}
 	signBtnJS := `(function(){

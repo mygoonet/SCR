@@ -87,7 +87,6 @@ func ParseDeliveryNotes(ctx context.Context) ([]DeliveryNote, error) {
 	chromedp.Run(ctx, chromedp.Evaluate(
 		`document.querySelectorAll('[data-tid="TableRow"] [data-tid="WaybillNumber"]').length`, &rowCount))
 	log.Printf("ParseDeliveryRows: waybill rows = %d url=%s", rowCount, url)
-	chromedp.Sleep(600 * time.Second)
 	takeScreenshot(ctx, "parse_carrier_table")
 
 	// Диагностика: дамп содержимого строк (что за строка без WaybillNumber).

@@ -295,6 +295,11 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 					firstErr = err
 				}
 				closePopups(ctx)
+				// Перезагружаем страницу между попытками — как signAll:
+				// иначе после неудачного клика страница остаётся в
+				// сломанном состоянии и следующие попытки тоже падают.
+				reloadNotesAPI(ctx)
+				waitForTableRows(ctx)
 				continue
 			}
 			nl.Logf(">>> Накладная %s подписана, проверяю через API...", n.Number)
