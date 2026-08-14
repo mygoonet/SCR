@@ -156,9 +156,40 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 		log.Printf("SIGN-DEBUG %s: signItem wait failed. %s", number, popupDump)
 		return fmt.Errorf("sign menu item: %w", err)
 	}
+	// Диагностика: дамп всех пунктов popup-меню перед кликом
+	var menuItems string
+	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var p = document.querySelector('[data-tid="Popup__root"]');
+		if(!p) return 'NO Popup__root';
+		var items = p.querySelectorAll('[data-tid]');
+		var out = [];
+		for(var i=0;i<items.length;i++){
+			var t = items[i].getAttribute('data-tid');
+			if(t && t.indexOf('Popup') === -1)
+				out.push(t+'="'+items[i].innerText.replace(/\s+/g,' ').trim().slice(0,60)+'"');
+		}
+		return out.join(' | ');
+	})()`, &menuItems))
+	log.Printf("SIGN-DEBUG %s: popup menu items: %s", number, menuItems)
+
 	if err := clickAtCenter(ctx, `document.querySelector('[data-tid="SignWithoutDriverSignature"]')`); err != nil {
 		return fmt.Errorf("click sign item: %w", err)
 	}
+	// Диагностика: что появилось через 2 секунды после клика
+	chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
+	var afterClick string
+	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var parts = [];
+		parts.push('popup=' + (document.querySelector('[data-tid="Popup__root"]') ? 'YES' : 'NO'));
+		parts.push('sidePage=' + (document.querySelector('[data-tid="SidePage__root"]') ? 'YES' : 'NO'));
+		parts.push('sidePageFooter=' + (document.querySelector('[data-tid="SidePageFooter__root"]') ? 'YES' : 'NO'));
+		var d = document.querySelector('[data-tid="SidePage__root"]');
+		if(d) parts.push('sidePageText='+d.innerText.replace(/\s+/g,' ').trim().slice(0,300));
+		parts.push('url='+location.href);
+		parts.push('bodyHead='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,300));
+		return parts.join('\n');
+	})()`, &afterClick))
+	log.Printf("SIGN-DEBUG %s: 2s after click: %s", number, afterClick)
 
 	// 3. SidePage "Подписание накладной" -> кнопка "Подписать" в футере
 	sidePageJS := `document.querySelector('[data-tid="SidePageFooter__root"] [data-tid="Sign"]') !== null`

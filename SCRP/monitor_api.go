@@ -295,10 +295,12 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 					firstErr = err
 				}
 				closePopups(ctx)
-				// Перезагружаем страницу между попытками — как signAll:
-				// иначе после неудачного клика страница остаётся в
-				// сломанном состоянии и следующие попытки тоже падают.
-				reloadNotesAPI(ctx)
+				// Перезагружаем страницу между попытками — как signAll.
+				// Используем FetchNotesAPI: bare reloadNotesAPI + waitForTableRows
+				// не работают, т.к. fetch-перехват держит /transportations в паузе
+				// и таблица не рендерится. FetchNotesAPI перехватывает запрос,
+				// читает тело и отпускает его — после этого таблица рисуется.
+				FetchNotesAPI(ctx, 20)
 				waitForTableRows(ctx)
 				continue
 			}
