@@ -373,7 +373,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 	startTransportationsCapture(ctx)
 
-	interval := 360 * time.Second
+	interval := 10 * time.Second
 	autoSign := true
 	giveUp := map[string]bool{}
 
