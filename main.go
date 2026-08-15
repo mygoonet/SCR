@@ -47,7 +47,7 @@ func main() {
 		SCRP.MonitorAPI(browser, cfg, telegram, cmdCh)
 
 		// Для автономного теста логин + запрос к API:
-		// SCRP.TestAPI(browser, cfg)
+		//SCRP.TestAPI(browser, cfg)
 	}()
 
 	go func() {

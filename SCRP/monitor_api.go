@@ -358,8 +358,12 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 	}
 	return firstErr
 }
-
-func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan MonitorCmd) {
+func MonitorAPI(
+	browser *Browser,
+	cfg Config,
+	tel *TelegramClient,
+	cmdCh <-chan MonitorCmd,
+) {
 	session := browser.NewSession()
 	defer session.Close()
 
@@ -375,7 +379,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 	startTransportationsCapture(ctx)
 
-	interval := 10 * time.Second
+	interval := 360 * time.Second
 	autoSign := true
 	giveUp := map[string]bool{}
 
@@ -388,91 +392,205 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 	defer ticker.Stop()
 
 	resetCh := make(chan struct{}, 1)
+
+	// Один полный обход сразу при старте.
+	checkAndSign := func() {
+		notes, err := FetchNotesAPI(ctx, 30)
+		if err != nil {
+			log.Printf("MonitorAPI: ошибка получения накладных: %v", err)
+
+			fetchFails++
+
+			if tel != nil &&
+				fetchFails >= 3 &&
+				time.Since(lastFetchAlert) >= 10*time.Minute {
+
+				lastFetchAlert = time.Now()
+
+				tel.Sendf(
+					"⚠️ Мониторинг: не получаю накладные %d раз подряд: %v",
+					fetchFails,
+					err,
+				)
+			}
+
+			return
+		}
+
+		fetchFails = 0
+
+		log.Printf("MonitorAPI: накладные (%d):", len(notes))
+
+		for _, n := range notes {
+			log.Printf(
+				"  %s  от %s  %s → %s  %s",
+				n.Number,
+				n.Date,
+				n.Consignor,
+				n.Consignee,
+				n.Carrier,
+			)
+		}
+
+		// Накладные, которых больше нет в списке,
+		// разблокируем.
+		//
+		// Если они снова появятся позже —
+		// можно будет попробовать подписать их ещё раз.
+		for num := range giveUp {
+			found := false
+
+			for _, n := range notes {
+				if n.Number == num {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				delete(giveUp, num)
+			}
+		}
+
+		// Получаем накладные, доступные для подписания.
+		todo := signableNotes(notes)
+
+		// Убираем накладные, которые ранее окончательно
+		// не удалось подписать.
+		filtered := todo[:0]
+
+		for _, n := range todo {
+			if !giveUp[n.Number] {
+				filtered = append(filtered, n)
+			}
+		}
+
+		todo = filtered
+
+		if len(todo) > 0 && tel != nil {
+			nums := make([]string, 0, len(todo))
+
+			for _, n := range todo {
+				nums = append(nums, n.Number)
+			}
+
+			tel.Sendf(
+				"ВНИМАНИЕ: накладные на подпись (%d): %v",
+				len(todo),
+				nums,
+			)
+		}
+
+		// ВАЖНО:
+		//
+		// autoSign берётся из текущего состояния.
+		// Если AutoSign изменился через cmdCh во время
+		// предыдущего обхода, новое значение будет применено
+		// именно здесь, на следующем обходе.
+		if autoSign && len(todo) > 0 {
+			if err := signAllAPI(
+				ctx,
+				cfg.CertUser,
+				todo,
+				tel,
+				giveUp,
+			); err != nil {
+
+				log.Printf(
+					"MonitorAPI: SignAll ошибка: %v",
+					err,
+				)
+
+				if tel != nil {
+					tel.Sendf(
+						"❌ MonitorAPI: SignAll ошибка: %v",
+						err,
+					)
+				}
+			} else {
+				log.Println("MonitorAPI: SignAll завершено")
+
+				if tel != nil {
+					tel.Sendf("MonitorAPI: SignAll завершено")
+				}
+			}
+		}
+	}
+
+	// =========================================================
+	// ПЕРВЫЙ ОБХОД СРАЗУ ПРИ СТАРТЕ
+	// =========================================================
+
+	checkAndSign()
+
 	stopAnnouncer := startAnnouncer(ctx, interval, resetCh)
+	defer stopAnnouncer()
+
 	announce(resetCh)
+	// =========================================================
+	// ОСНОВНОЙ ЦИКЛ
+	// =========================================================
 
 	for {
 		select {
+
+		// -----------------------------------------------------
+		// Команды управления
+		// -----------------------------------------------------
+
 		case cmd, ok := <-cmdCh:
 			if !ok {
-				log.Println("MonitorAPI: канал управления закрыт, завершаюсь")
+				log.Println(
+					"MonitorAPI: канал управления закрыт, завершаюсь",
+				)
 				return
 			}
+
+			// Меняем интервал.
+			//
+			// Новый интервал будет использоваться
+			// начиная со следующего тика.
 			if cmd.Interval > 0 {
 				interval = cmd.Interval
+
 				ticker.Reset(interval)
+
 				stopAnnouncer()
-				stopAnnouncer = startAnnouncer(ctx, interval, resetCh)
+
+				stopAnnouncer = startAnnouncer(
+					ctx,
+					interval,
+					resetCh,
+				)
+
 				announce(resetCh)
 			}
+
+			// Меняем AutoSign.
+			//
+			// Если сейчас signAllAPI уже выполняется,
+			// оно НЕ будет прервано.
+			//
+			// Новое значение будет использовано
+			// при следующем checkAndSign().
 			if cmd.AutoSign != nil {
 				autoSign = *cmd.AutoSign
 			}
-			log.Printf("MonitorAPI: параметры обновлены (interval=%s, autosign=%v)", interval, autoSign)
+
+			log.Printf(
+				"MonitorAPI: параметры обновлены (interval=%s, autosign=%v)",
+				interval,
+				autoSign,
+			)
+
+		// -----------------------------------------------------
+		// Очередной обход
+		// -----------------------------------------------------
+
 		case <-ticker.C:
+
+			checkAndSign()
 			announce(resetCh)
-
-			notes, err := FetchNotesAPI(ctx, 30)
-			if err != nil {
-				log.Printf("MonitorAPI: ошибка получения накладных: %v", err)
-				fetchFails++
-				if tel != nil && fetchFails >= 3 && time.Since(lastFetchAlert) >= 10*time.Minute {
-					lastFetchAlert = time.Now()
-					tel.Sendf("⚠️ Мониторинг: не получаю накладные %d раз подряд: %v", fetchFails, err)
-				}
-				continue
-			}
-			fetchFails = 0
-
-			log.Printf("MonitorAPI: накладные (%d):", len(notes))
-			for _, n := range notes {
-				log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
-			}
-
-			// Накладные, которых больше нет в списке, разблокируем (если
-			// вернутся позже — можно попробовать снова).
-			for num := range giveUp {
-				found := false
-				for _, n := range notes {
-					if n.Number == num {
-						found = true
-						break
-					}
-				}
-				if !found {
-					delete(giveUp, num)
-				}
-			}
-
-			todo := signableNotes(notes)
-			filtered := todo[:0]
-			for _, n := range todo {
-				if !giveUp[n.Number] {
-					filtered = append(filtered, n)
-				}
-			}
-			todo = filtered
-			if len(todo) > 0 && tel != nil {
-				nums := make([]string, 0, len(todo))
-				for _, n := range todo {
-					nums = append(nums, n.Number)
-				}
-				tel.Sendf("ВНИМАНИЕ: накладные на подпись (%d): %v", len(todo), nums)
-			}
-
-			if autoSign && len(todo) > 0 {
-				if err := signAllAPI(ctx, cfg.CertUser, todo, tel, giveUp); err != nil {
-					log.Printf("MonitorAPI: SignAll ошибка: %v", err)
-					if tel != nil {
-						tel.Sendf("❌ MonitorAPI: SignAll ошибка: %v", err)
-					}
-				} else {
-					log.Println("MonitorAPI: SignAll завершено")
-					if tel != nil {
-						tel.Sendf("MonitorAPI: SignAll завершено")
-					}
-				}
-			}
 		}
 	}
 }

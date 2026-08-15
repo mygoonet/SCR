@@ -12,6 +12,20 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+func reactClickEl(ctx context.Context, selector string) error {
+	js := "(function(){function reactClick(el){var r=el.getBoundingClientRect();" +
+		"var x=r.x+r.width/2,y=r.y+r.height/2;" +
+		"var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));}var el=" + selector + ";if(!el)return 'NOT_FOUND';reactClick(el);return 'OK';})()"
+	var res string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &res)); err != nil {
+		return err
+	}
+	if res != "OK" {
+		return fmt.Errorf("element not found: %s", selector)
+	}
+	return nil
+}
+
 // clickAtCenter ищет элемент JS-выражением (должно вернуть элемент или null)
 // и кликает по его центру реальной мышью — React-меню Контура не реагирует
 // на синтетический el.click().
@@ -78,19 +92,30 @@ func waitForJS(ctx context.Context, js string, timeout time.Duration) error {
 // openRowMenu открывает меню "три точки" в строке накладной с номером number.
 func openRowMenu(ctx context.Context, number string) error {
 	var res string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(num){
-		var rows = document.querySelectorAll('[data-tid="TableRow"]');
-		for(var i=0;i<rows.length;i++){
-			var numEl = rows[i].querySelector('[data-tid="WaybillNumber"]');
-			if(numEl && numEl.textContent.trim() === num){
-				var btn = rows[i].querySelector('[data-tid="RowActionsButton"] button[aria-controls*="Popup"], [data-tid="RowActionsButton"] button');
-				if(!btn) return 'no menu button';
-				btn.click();
-				return 'ok';
-			}
-		}
-		return 'not found';
-	})(%q)`, number), &res)); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`(function(num) {
+    var nums = document.querySelectorAll('[data-tid="WaybillNumber"]');
+
+    for (var i = 0; i < nums.length; i++) {
+        if (nums[i].textContent.trim() === num) {
+            // 1. Поднимаемся до TR
+            var tr = nums[i].closest('[data-tid="TableRow"]');
+            if (!tr) return 'no table row';
+
+            // 2. Ищем RowActions ВНУТРИ этого TR
+            var rowActions = tr.querySelector('[data-tid="RowActions"]');
+            if (!rowActions) return 'no row actions';
+
+            // 3. Кликаем по кнопке внутри RowActions
+            var btn = rowActions.querySelector('button[aria-controls]');
+            if (!btn) return 'no button';
+
+            btn.click();
+            return 'ok';
+        }
+    }
+
+    return 'not found';
+})(%q)`, number), &res)); err != nil {
 		return err
 	}
 	if res != "ok" {
@@ -172,7 +197,7 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	})()`, &menuItems))
 	log.Printf("SIGN-DEBUG %s: popup menu items: %s", number, menuItems)
 
-	if err := clickAtCenter(ctx, `document.querySelector('[data-tid="SignWithoutDriverSignature"]')`); err != nil {
+	if err := reactClickEl(ctx, "document.querySelector('[data-tid=\"Popup__root\"] [data-tid=\"SignWithoutDriverSignature\"]')"); err != nil {
 		return fmt.Errorf("click sign item: %w", err)
 	}
 	// Диагностика: что появилось через 2 секунды после клика
@@ -208,8 +233,7 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 			parts.push('Popup__root count=' + popups.length);
 			var modals = document.querySelectorAll('[data-tid*="Modal"], [role="dialog"]');
 			parts.push('Modal/dialog count=' + modals.length);
-			parts.push('bodyText='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,500));
-			return parts.join('\n');
+		parts.push('bodyText='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,500));
 		})()`, &dump))
 		log.Printf("SIGN-DEBUG %s: sidePage timeout. %s", number, dump)
 		takeScreenshot(ctx, number+"_sidepage_fail")
@@ -231,44 +255,73 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	if err := waitForJS(ctx, `document.querySelector('[data-tid^="certificate_"]') !== null`, 30*time.Second); err != nil {
 		return fmt.Errorf("certificate modal: %w", err)
 	}
-	certJS := fmt.Sprintf(`(function(user){
-		var certs = document.querySelectorAll('[data-tid^="certificate_"]');
-		for(var i=0;i<certs.length;i++){
-			if(certs[i].textContent.indexOf(user) !== -1) return certs[i];
-		}
-		return null;
-	})(%q)`, certUser)
-	if err := clickAtCenter(ctx, certJS); err != nil {
+	// ВАЖНО: простой .click() (clickAtCenter) НЕ выбирает сертификат —
+	// React-выбор привязан к pointerdown/mousedown, а не к click.
+	// После одного .click() "Выбрать" остаётся disabled, и весь цикл
+	// дальше падает ("не подписывает"). Нужна полная последовательность событий.
+	certClickJS := "function reactClick(el){var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));}" + fmt.Sprintf("(function(user){var certs=document.querySelectorAll('[data-tid^=\"certificate_\"]');for(var i=0;i<certs.length;i++){if(certs[i].textContent.indexOf(user)!==-1){var inner=certs[i].querySelector('div')||certs[i];reactClick(inner);return 'clicked';}}return null;})(%q)", certUser)
+	var certRes string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(certClickJS, &certRes)); err != nil {
 		return fmt.Errorf("click certificate: %w", err)
 	}
+	if certRes != "clicked" {
+		return fmt.Errorf("certificate %q not found", certUser)
+	}
 	chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
-	chooseJS := `(function(){
+
+	// Ждём, пока "Выбрать" станет enabled — клик по disabled молча ничего не делает.
+	if err := waitForJS(ctx, `(function(){
 		var c = document.querySelector('[data-tid="ModalFooter__root"] [data-tid="Choose"], [data-tid="Choose"]');
-		return c ? (c.tagName === 'BUTTON' ? c : (c.querySelector('button') || c)) : null;
-	})()`
-	if err := clickAtCenter(ctx, chooseJS); err != nil {
+		if(!c) return false;
+		var b = c.tagName === 'BUTTON' ? c : (c.querySelector('button') || c);
+		return !b.disabled;
+	})()`, 10*time.Second); err != nil {
+		return fmt.Errorf("choose button disabled after certificate click: %w", err)
+	}
+	chooseClickJS := "function reactClick(el){var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));}" + "(function(){var c=document.querySelector('[data-tid=\"ModalFooter__root\"] [data-tid=\"Choose\"], [data-tid=\"Choose\"]');if(!c) return null;var b=c.tagName==='BUTTON'?c:(c.querySelector('button')||c);reactClick(b);return 'clicked';})()"
+	var chooseRes string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(chooseClickJS, &chooseRes)); err != nil {
 		return fmt.Errorf("click Choose: %w", err)
+	}
+	if chooseRes != "clicked" {
+		return fmt.Errorf("Choose button not found")
 	}
 
 	// 5. Модалка "Выбор доверенности" -> доверенность -> "Продолжить"
 	if err := waitForJS(ctx, `document.querySelector('[data-tid="representative-poa-list-item"]') !== null`, 30*time.Second); err != nil {
 		return fmt.Errorf("poa modal: %w", err)
 	}
-	if err := clickAtCenter(ctx, `document.querySelector('[data-tid="representative-poa-list-item"]')`); err != nil {
+	poaClickJS := "function reactClick(el){var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));}" + "(function(){var item=document.querySelector('[data-tid=\"representative-poa-list-item\"]');if(!item) return null;reactClick(item);return 'clicked';})()"
+	var poaRes string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(poaClickJS, &poaRes)); err != nil {
 		return fmt.Errorf("click poa: %w", err)
 	}
+	if poaRes != "clicked" {
+		return fmt.Errorf("poa item not found")
+	}
 	chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
-	continueJS := `(function(){
+
+	// Ждём, пока "Продолжить" станет enabled (доверенность выбрана), затем кликаем.
+	if err := waitForJS(ctx, `(function(){
 		var b = document.querySelector('[data-tid="continue-with-poa-button"]');
-		return b ? (b.tagName === 'BUTTON' ? b : (b.querySelector('button') || b)) : null;
-	})()`
-	if err := clickAtCenter(ctx, continueJS); err != nil {
+		if(!b) return false;
+		var btn = b.tagName === 'BUTTON' ? b : (b.querySelector('button') || b);
+		return !btn.disabled;
+	})()`, 10*time.Second); err != nil {
+		return fmt.Errorf("continue button disabled after poa click: %w", err)
+	}
+	continueClickJS := "function reactClick(el){var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));}" + "(function(){var b=document.querySelector('[data-tid=\"continue-with-poa-button\"]');if(!b) return null;var btn=b.tagName==='BUTTON'?b:(b.querySelector('button')||b);reactClick(btn);return 'clicked';})()"
+	var contRes string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(continueClickJS, &contRes)); err != nil {
 		return fmt.Errorf("click continue: %w", err)
+	}
+	if contRes != "clicked" {
+		return fmt.Errorf("continue button not found")
 	}
 
 	// 6. Ждём закрытия модалки — подписание выполняется криптоплагином
 	if err := waitForJS(ctx,
-		`document.querySelector('[data-tid*="Modal"][data-tid*="root"], [role="dialog"]') === null`,
+		`document.querySelector('[data-tid="Modal"][data-tid="root"], [role="dialog"]') === null`,
 		90*time.Second); err != nil {
 		return fmt.Errorf("signing did not finish: %w", err)
 	}
