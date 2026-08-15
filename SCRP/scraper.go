@@ -27,7 +27,7 @@ var skipNumbers = map[string]bool{
 	"000011645": true,
 
 	"000010269": true,
-	//"000000420": true, //<--- dont remove//
+	"000000420": true, //<--- dont remove//
 }
 
 func Monitor(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan MonitorCmd) {
