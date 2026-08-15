@@ -16,6 +16,20 @@ type MonitorCmd struct {
 	AutoSign *bool         // nil = не менять
 }
 
+var skipNumbers = map[string]bool{
+
+	"000011651": true,
+	//"000011650": true,
+	"000011649": true,
+	"000011648": true,
+	"000011647": true,
+	"000011646": true,
+	"000011645": true,
+
+	"000010269": true,
+	//"000000420": true, //<--- dont remove//
+}
+
 func Monitor(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan MonitorCmd) {
 	session := browser.NewSession()
 	defer session.Close()
@@ -152,20 +166,6 @@ func initSession(ctx context.Context, cfg Config) error {
 	}
 	log.Println("initSession: carrier OK")
 	return nil
-}
-
-var skipNumbers = map[string]bool{
-
-	"000011651": true,
-	//"000011650": true,
-	"000011649": true,
-	"000011648": true,
-	"000011647": true,
-	"000011646": true,
-	"000011645": true,
-
-	"000010269": true,
-	"000000420": true, //<--- dont remove//
 }
 
 func signAll(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient) error {

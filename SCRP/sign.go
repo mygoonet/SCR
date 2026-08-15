@@ -157,10 +157,10 @@ func takeScreenshot(ctx context.Context, name string) {
 // "Документы на подпись" сертификатом certUser.
 func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	takeScreenshot(ctx, number+"_1_before")
+
 	if err := waitForTableRows(ctx); err != nil {
 		return err
 	}
-
 	// 1. Меню "три точки" в строке накладной
 	if err := openRowMenu(ctx, number); err != nil {
 		return fmt.Errorf("open row menu: %w", err)
@@ -172,70 +172,23 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	// элемент исчезает из DOM (querySelector → null).
 	signItemJS := `document.querySelector('[data-tid="Popup__root"] [data-tid="SignWithoutDriverSignature"]') !== null`
 	if err := waitForJS(ctx, signItemJS, 10*time.Second); err != nil {
-		var popupDump string
-		chromedp.Run(ctx, chromedp.Evaluate(`(function(){
-			var p = document.querySelector('[data-tid="Popup__root"]');
-			if(!p) return 'NO Popup__root';
-			return 'POPUP: '+p.innerText.replace(/\s+/g,' ').trim().slice(0,200);
-		})()`, &popupDump))
-		log.Printf("SIGN-DEBUG %s: signItem wait failed. %s", number, popupDump)
+		log.Printf("SIGN-DEBUG %s: signItem wait failed. %s", number, debugPopupText(ctx))
 		return fmt.Errorf("sign menu item: %w", err)
 	}
 	// Диагностика: дамп всех пунктов popup-меню перед кликом
-	var menuItems string
-	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
-		var p = document.querySelector('[data-tid="Popup__root"]');
-		if(!p) return 'NO Popup__root';
-		var items = p.querySelectorAll('[data-tid]');
-		var out = [];
-		for(var i=0;i<items.length;i++){
-			var t = items[i].getAttribute('data-tid');
-			if(t && t.indexOf('Popup') === -1)
-				out.push(t+'="'+items[i].innerText.replace(/\s+/g,' ').trim().slice(0,60)+'"');
-		}
-		return out.join(' | ');
-	})()`, &menuItems))
-	log.Printf("SIGN-DEBUG %s: popup menu items: %s", number, menuItems)
+	log.Printf("SIGN-DEBUG %s: popup menu items: %s", number, debugPopupMenuItems(ctx))
 
 	if err := reactClickEl(ctx, "document.querySelector('[data-tid=\"Popup__root\"] [data-tid=\"SignWithoutDriverSignature\"]')"); err != nil {
 		return fmt.Errorf("click sign item: %w", err)
 	}
 	// Диагностика: что появилось через 2 секунды после клика
 	chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
-	var afterClick string
-	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
-		var parts = [];
-		parts.push('popup=' + (document.querySelector('[data-tid="Popup__root"]') ? 'YES' : 'NO'));
-		parts.push('sidePage=' + (document.querySelector('[data-tid="SidePage__root"]') ? 'YES' : 'NO'));
-		parts.push('sidePageFooter=' + (document.querySelector('[data-tid="SidePageFooter__root"]') ? 'YES' : 'NO'));
-		var d = document.querySelector('[data-tid="SidePage__root"]');
-		if(d) parts.push('sidePageText='+d.innerText.replace(/\s+/g,' ').trim().slice(0,300));
-		parts.push('url='+location.href);
-		parts.push('bodyHead='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,300));
-		return parts.join('\n');
-	})()`, &afterClick))
-	log.Printf("SIGN-DEBUG %s: 2s after click: %s", number, afterClick)
+	log.Printf("SIGN-DEBUG %s: 2s after click: %s", number, debugAfterClickState(ctx))
 
 	// 3. SidePage "Подписание накладной" -> кнопка "Подписать" в футере
 	sidePageJS := `document.querySelector('[data-tid="SidePageFooter__root"] [data-tid="Sign"]') !== null`
 	if err := waitForJS(ctx, sidePageJS, 15*time.Second); err != nil {
-		var dump string
-		chromedp.Run(ctx, chromedp.Evaluate(`(function(){
-			var parts = [];
-			var sp = document.querySelector('[data-tid="SidePage__root"]');
-			parts.push('SidePage__root=' + (sp ? 'YES' : 'NO'));
-			var spf = document.querySelector('[data-tid="SidePageFooter__root"]');
-			parts.push('SidePageFooter__root=' + (spf ? 'YES' : 'NO'));
-			var allSide = document.querySelectorAll('[data-tid*="SidePage"]');
-			parts.push('SidePage* count=' + allSide.length);
-			for(var i=0;i<allSide.length && i<5;i++) parts.push('  '+allSide[i].getAttribute('data-tid'));
-			var popups = document.querySelectorAll('[data-tid="Popup__root"]');
-			parts.push('Popup__root count=' + popups.length);
-			var modals = document.querySelectorAll('[data-tid*="Modal"], [role="dialog"]');
-			parts.push('Modal/dialog count=' + modals.length);
-		parts.push('bodyText='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,500));
-		})()`, &dump))
-		log.Printf("SIGN-DEBUG %s: sidePage timeout. %s", number, dump)
+		log.Printf("SIGN-DEBUG %s: sidePage timeout. %s", number, debugSidePageState(ctx))
 		takeScreenshot(ctx, number+"_sidepage_fail")
 		return fmt.Errorf("sign side page: %w", err)
 	}
@@ -329,4 +282,75 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	takeScreenshot(ctx, number+"_done")
 	chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
 	return nil
+}
+
+// debugPopupText возвращает текст popup-меню (или маркер его отсутствия)
+// для диагностики при неудачном ожидании пункта меню.
+func debugPopupText(ctx context.Context) string {
+	var s string
+	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var p = document.querySelector('[data-tid="Popup__root"]');
+		if(!p) return 'NO Popup__root';
+		return 'POPUP: '+p.innerText.replace(/\s+/g,' ').trim().slice(0,200);
+	})()`, &s))
+	return s
+}
+
+// debugPopupMenuItems возвращает дамп всех пунктов popup-меню с их data-tid.
+func debugPopupMenuItems(ctx context.Context) string {
+	var s string
+	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var p = document.querySelector('[data-tid="Popup__root"]');
+		if(!p) return 'NO Popup__root';
+		var items = p.querySelectorAll('[data-tid]');
+		var out = [];
+		for(var i=0;i<items.length;i++){
+			var t = items[i].getAttribute('data-tid');
+			if(t && t.indexOf('Popup') === -1)
+				out.push(t+'="'+items[i].innerText.replace(/\s+/g,' ').trim().slice(0,60)+'"');
+		}
+		return out.join(' | ');
+	})()`, &s))
+	return s
+}
+
+// debugAfterClickState возвращает состояние страницы через 2 секунды после
+// клика по пункту меню: popup, sidePage, url, первые символы body.
+func debugAfterClickState(ctx context.Context) string {
+	var s string
+	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var parts = [];
+		parts.push('popup=' + (document.querySelector('[data-tid="Popup__root"]') ? 'YES' : 'NO'));
+		parts.push('sidePage=' + (document.querySelector('[data-tid="SidePage__root"]') ? 'YES' : 'NO'));
+		parts.push('sidePageFooter=' + (document.querySelector('[data-tid="SidePageFooter__root"]') ? 'YES' : 'NO'));
+		var d = document.querySelector('[data-tid="SidePage__root"]');
+		if(d) parts.push('sidePageText='+d.innerText.replace(/\s+/g,' ').trim().slice(0,300));
+		parts.push('url='+location.href);
+		parts.push('bodyHead='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,300));
+		return parts.join('\n');
+	})()`, &s))
+	return s
+}
+
+// debugSidePageState возвращает дамп состояния sidePage/popup/modal/body
+// для диагностики при таймауте ожидания кнопки подписания.
+func debugSidePageState(ctx context.Context) string {
+	var s string
+	chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var parts = [];
+		var sp = document.querySelector('[data-tid="SidePage__root"]');
+		parts.push('SidePage__root=' + (sp ? 'YES' : 'NO'));
+		var spf = document.querySelector('[data-tid="SidePageFooter__root"]');
+		parts.push('SidePageFooter__root=' + (spf ? 'YES' : 'NO'));
+		var allSide = document.querySelectorAll('[data-tid*="SidePage"]');
+		parts.push('SidePage* count=' + allSide.length);
+		for(var i=0;i<allSide.length && i<5;i++) parts.push('  '+allSide[i].getAttribute('data-tid'));
+		var popups = document.querySelectorAll('[data-tid="Popup__root"]');
+		parts.push('Popup__root count=' + popups.length);
+		var modals = document.querySelectorAll('[data-tid*="Modal"], [role="dialog"]');
+		parts.push('Modal/dialog count=' + modals.length);
+		parts.push('bodyText='+document.body.innerText.replace(/\s+/g,' ').trim().slice(0,500));
+		return parts.join('\n');
+	})()`, &s))
+	return s
 }
