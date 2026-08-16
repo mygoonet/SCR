@@ -385,6 +385,7 @@ func MonitorAPI(
 
 	fetchFails := 0
 	lastFetchAlert := time.Time{}
+	tickCount := 0 // каждых 3 обход очищаем giveUp
 
 	log.Println("MonitorAPI запущен. Тикер:", interval)
 
@@ -395,6 +396,14 @@ func MonitorAPI(
 
 	// Один полный обход сразу при старте.
 	checkAndSign := func() {
+		tickCount++
+
+		if tickCount%3 == 0 {
+			giveUp = map[string]bool{}
+			log.Println("MonitorAPI: очистка giveUp каждые 3 тика")
+			tickCount = 0
+
+		}
 		notes, err := FetchNotesAPI(ctx, 30)
 		if err != nil {
 			log.Printf("MonitorAPI: ошибка получения накладных: %v", err)
