@@ -28,6 +28,7 @@ func main() {
 	defer browser.Close()
 
 	go SCRP.StartWebServer(cfg.WebAddr)
+	go SCRP.StartScreenshotsCleanup()
 
 	cmdCh := make(chan SCRP.MonitorCmd, 2)
 
