@@ -58,7 +58,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprint(w, `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">
-	<tr><th>Номер</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Скриншоты</th></tr>`)
+	<tr><th>Номер</th><th>Создано</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Скриншоты</th></tr>`)
 
 	for _, num := range nums {
 		dir := filepath.Join(screenshotDir, num)
@@ -68,6 +68,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fmt.Fprintf(w, "<tr><td><b>%s</b></td>", html.EscapeString(num))
+		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.CreatedAt))
 		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.Date))
 		fmt.Fprintf(w, "<td>%s → %s</td>",
 			html.EscapeString(nf.Consignor), html.EscapeString(nf.Consignee))
