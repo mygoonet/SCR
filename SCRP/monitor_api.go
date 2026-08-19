@@ -358,12 +358,8 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 	}
 	return firstErr
 }
-func MonitorAPI(
-	browser *Browser,
-	cfg Config,
-	tel *TelegramClient,
-	cmdCh <-chan MonitorCmd,
-) {
+func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan MonitorCmd) {
+
 	session := browser.NewSession()
 	defer session.Close()
 
