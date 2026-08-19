@@ -36,7 +36,7 @@ func main() {
 	Layout := "2006-01-02 15:04:05"
 	t := fmt.Sprintf("%s", time.Now().Format(Layout))
 
-	go telegram.Sendf("scraper in started - %s", t)
+	go telegram.Sendf("scraper in started !- %s", t)
 
 	go func() {
 		defer func() {
