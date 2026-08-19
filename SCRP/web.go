@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // StartWebServer запускает HTTP-сервер со списком накладных (порт cfg.WebAddr).
@@ -41,26 +42,46 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var nums []string
-	for _, e := range entries {
-		if e.IsDir() {
-			nums = append(nums, e.Name())
-		}
+	type noteItem struct {
+		num     string
+		created time.Time
 	}
-	sort.Strings(nums)
+	items := make([]noteItem, 0, len(entries))
+	const timeLayout = "2006-01-02 15:04:05"
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		num := e.Name()
+		dir := filepath.Join(screenshotDir, num)
+		created := time.Time{}
+		if b, err := os.ReadFile(filepath.Join(dir, "note.json")); err == nil {
+			var nf NoteFileJSON
+			if json.Unmarshal(b, &nf) == nil && nf.CreatedAt != "" {
+				if t, err := time.Parse(timeLayout, nf.CreatedAt); err == nil {
+					created = t
+				}
+			}
+		}
+		items = append(items, noteItem{num: num, created: created})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].created.After(items[j].created)
+	})
 
 	fmt.Fprint(w, "<html><head><meta charset='utf-8'><title>Накладные</title></head><body>")
-	fmt.Fprintf(w, "<h1>Накладные (%d)</h1>", len(nums))
+	fmt.Fprintf(w, "<h1>Накладные (%d)</h1>", len(items))
 
-	if len(nums) == 0 {
+	if len(items) == 0 {
 		fmt.Fprint(w, "<p>нет данных</p></body></html>")
 		return
 	}
 
 	fmt.Fprint(w, `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">
-	<tr><th>Номер</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Скриншоты</th></tr>`)
+	<tr><th>Номер</th><th>Создано</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Скриншоты</th></tr>`)
 
-	for _, num := range nums {
+	for _, it := range items {
+		num := it.num
 		dir := filepath.Join(screenshotDir, num)
 		var nf NoteFileJSON
 		if b, err := os.ReadFile(filepath.Join(dir, "note.json")); err == nil {
@@ -68,6 +89,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fmt.Fprintf(w, "<tr><td><b>%s</b></td>", html.EscapeString(num))
+		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.CreatedAt))
 		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.Date))
 		fmt.Fprintf(w, "<td>%s → %s</td>",
 			html.EscapeString(nf.Consignor), html.EscapeString(nf.Consignee))

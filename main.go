@@ -28,6 +28,7 @@ func main() {
 	defer browser.Close()
 
 	go SCRP.StartWebServer(cfg.WebAddr)
+	go SCRP.StartScreenshotsCleanup()
 
 	cmdCh := make(chan SCRP.MonitorCmd, 2)
 
@@ -47,7 +48,7 @@ func main() {
 		SCRP.MonitorAPI(browser, cfg, telegram, cmdCh)
 
 		// Для автономного теста логин + запрос к API:
-		// SCRP.TestAPI(browser, cfg)
+		//SCRP.TestAPI(browser, cfg)
 	}()
 
 	go func() {

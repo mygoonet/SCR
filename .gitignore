@@ -8,3 +8,7 @@ SCR
 SCR.iml
 /prof-local/
 /certs-cprocsp/
+.backup-*/
+/scrpcheck
+/screenshots/
+/scrp

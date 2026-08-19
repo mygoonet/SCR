@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -80,6 +81,7 @@ type NoteFileJSON struct {
 	DeliveryNote
 	Status    string `json:"status"`
 	Error     string `json:"error,omitempty"`
+	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 }
 
@@ -134,10 +136,21 @@ func (l *NoteLogger) SetStatus(status, errMsg string) {
 }
 
 func (l *NoteLogger) writeNoteJSON(n DeliveryNote, status, errMsg string) {
+	path := filepath.Join(l.Dir, "note.json")
+	createdAt := time.Now().Format(timeLayout)
+	if _, err := os.Stat(path); err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			var existing NoteFileJSON
+			if json.Unmarshal(data, &existing) == nil && existing.CreatedAt != "" {
+				createdAt = existing.CreatedAt
+			}
+		}
+	}
 	f := NoteFileJSON{
 		DeliveryNote: n,
 		Status:       status,
 		Error:        errMsg,
+		CreatedAt:    createdAt,
 		UpdatedAt:    time.Now().Format(timeLayout),
 	}
 	data, err := json.MarshalIndent(f, "", "  ")
@@ -145,7 +158,7 @@ func (l *NoteLogger) writeNoteJSON(n DeliveryNote, status, errMsg string) {
 		log.Printf("NoteLogger %s: marshal note.json: %v", l.Number, err)
 		return
 	}
-	if err := os.WriteFile(filepath.Join(l.Dir, "note.json"), data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0644); err != nil {
 		log.Printf("NoteLogger %s: write note.json: %v", l.Number, err)
 	}
 }
@@ -178,5 +191,77 @@ func (l *NoteLogger) Close() {
 			log.Printf("NoteLogger %s: close note.txt: %v", l.Number, err)
 		}
 		l.file = nil
+	}
+}
+
+func StartScreenshotsCleanup() {
+	go func() {
+		cleanupScreenshots()
+		ticker := time.NewTicker(4 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanupScreenshots()
+		}
+	}()
+}
+
+func cleanupScreenshots() {
+	entries, err := os.ReadDir(screenshotDir)
+	if err != nil {
+		log.Printf("cleanupScreenshots: read dir: %v", err)
+		return
+	}
+	type dirInfo struct {
+		path string
+		time time.Time
+	}
+	var dirs []dirInfo
+	activeDir := ""
+	if l := getActiveLogger(); l != nil {
+		activeDir = l.Dir
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(screenshotDir, e.Name())
+		if p == activeDir {
+			continue
+		}
+		created := time.Time{}
+		notePath := filepath.Join(p, "note.json")
+		if data, err := os.ReadFile(notePath); err == nil {
+			var nf NoteFileJSON
+			if json.Unmarshal(data, &nf) == nil && nf.CreatedAt != "" {
+				if t, err := time.Parse(timeLayout, nf.CreatedAt); err == nil {
+					created = t
+				}
+			}
+		}
+		if created.IsZero() {
+			if fi, err := os.Stat(p); err == nil {
+				created = fi.ModTime()
+			}
+		}
+		if created.IsZero() {
+			created = time.Now()
+		}
+		dirs = append(dirs, dirInfo{path: p, time: created})
+	}
+	sort.Slice(dirs, func(i, j int) bool {
+		return dirs[i].time.After(dirs[j].time)
+	})
+	keep := 15
+	if len(dirs) <= keep {
+		return
+	}
+	for _, d := range dirs[keep:] {
+		if d.path == activeDir {
+			continue
+		}
+		log.Printf("cleanupScreenshots: removing %s", d.path)
+		if err := os.RemoveAll(d.path); err != nil {
+			log.Printf("cleanupScreenshots: remove %s: %v", d.path, err)
+		}
 	}
 }
