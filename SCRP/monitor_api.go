@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"time"
@@ -38,12 +39,12 @@ type apiTransportations struct {
 }
 
 // pending хранит перехваченные (паузнутые в response-stage) запросы к
-// /transportations: RequestID -> true если это сам список.
+// /transportations: RequestID -> URL запроса.
 // pausedAt хранит время паузы каждого перехваченного запроса — чтобы из
 // карты можно было выбрать самый свежий, а не случайный.
 var (
 	pendingMu sync.Mutex
-	pending   = map[fetch.RequestID]bool{}
+	pending   = map[fetch.RequestID]string{}
 	pausedAt  = map[fetch.RequestID]time.Time{}
 )
 
@@ -54,14 +55,14 @@ var (
 // способ получить тело ответа SPA вместе со свежими токенами.
 func startTransportationsCapture(ctx context.Context) {
 	pendingMu.Lock()
-	pending = map[fetch.RequestID]bool{}
+	pending = map[fetch.RequestID]string{}
 	pausedAt = map[fetch.RequestID]time.Time{}
 	pendingMu.Unlock()
 
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
 		return fetch.Enable().
 			WithPatterns([]*fetch.RequestPattern{{
-				URLPattern:   "*transportations",
+				URLPattern:   "*transportations*",
 				RequestStage: fetch.RequestStageResponse,
 			}}).Do(c)
 	})); err != nil {
@@ -73,12 +74,14 @@ func startTransportationsCapture(ctx context.Context) {
 		if !ok {
 			return
 		}
-		isList := false
+		url := ""
 		if e.Request != nil {
-			isList = strings.HasSuffix(e.Request.URL, "/transportations")
+			url = e.Request.URL
 		}
+		log.Printf("fetch-intercept: %s", url)
+
 		pendingMu.Lock()
-		pending[e.RequestID] = isList
+		pending[e.RequestID] = url
 		pausedAt[e.RequestID] = time.Now()
 		pendingMu.Unlock()
 	})
@@ -86,22 +89,41 @@ func startTransportationsCapture(ctx context.Context) {
 
 // reloadNotesAPI перезагружает страницу, заставляя SPA сделать свежий
 // запрос /transportations (актуальные токены), и даёт 3с на старт.
-func reloadNotesAPI(ctx context.Context) {
-	chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+func reloadNotesAPI(ctx context.Context) error {
+	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return network.SetCacheDisabled(true).Do(ctx)
-	}))
-	chromedp.Run(ctx, chromedp.Reload())
-	chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
+	})); err != nil {
+		return fmt.Errorf("SetCacheDisabled: %w", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Reload()); err != nil {
+		return fmt.Errorf("Reload: %w", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Sleep(3*time.Second)); err != nil {
+		return fmt.Errorf("Sleep after reload: %w", err)
+	}
+	return nil
 }
 
 // FetchNotesAPI получает список накладных, перехватив ответ SPA.
 // timeoutSec — сколько секунд ждём появления/тела ответа.
+// Общий таймаут = timeoutSec + 15с (запас на reload/continuePaused/GetResponseBody).
 func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) {
-	notes, err := fetchNotesAPICtx(ctx, timeoutSec)
-	if err != nil && strings.Contains(err.Error(), "Invalid InterceptionId") {
-		log.Printf("FetchNotesAPI: протухший перехват, повторяю (ретрая)...")
-		continuePaused(ctx)
-		notes, err = fetchNotesAPICtx(ctx, timeoutSec)
+	outerCtx, outerCancel := context.WithTimeout(ctx, time.Duration(timeoutSec+15)*time.Second)
+	defer outerCancel()
+
+	notes, err := fetchNotesAPICtx(outerCtx, timeoutSec)
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "Invalid InterceptionId") {
+			log.Printf("FetchNotesAPI: протухший перехват, повторяю (ретрая)...")
+			continuePaused(outerCtx)
+			notes, err = fetchNotesAPICtx(outerCtx, timeoutSec)
+		} else if strings.Contains(errStr, "не перехвачен запрос") {
+			log.Printf("FetchNotesAPI: таймаут перехвата, повторяю...")
+			notes, err = fetchNotesAPICtx(outerCtx, timeoutSec)
+		} else if outerCtx.Err() != nil {
+			log.Printf("FetchNotesAPI: общий таймаут (browser завис?): %v", err)
+		}
 	}
 	return notes, err
 }
@@ -111,21 +133,27 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 	// висевшие паузные запросы (их InterceptionId становится невалидным), и они
 	// не должны оставаться кандидатами на выборку.
 	pendingMu.Lock()
-	pending = map[fetch.RequestID]bool{}
+	pending = map[fetch.RequestID]string{}
 	pausedAt = map[fetch.RequestID]time.Time{}
 	pendingMu.Unlock()
 
-	reloadNotesAPI(ctx)
+	if err := reloadNotesAPI(ctx); err != nil {
+		return nil, fmt.Errorf("reload: %w", err)
+	}
 
 	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
 
 	// Ждём появления паузнутого запроса списка.
 	var listID fetch.RequestID
 	for listID == "" && time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			continuePaused(ctx)
+			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+		}
 		pendingMu.Lock()
 		var newest time.Time
-		for id, isList := range pending {
-			if isList {
+		for id, url := range pending {
+			if u, err := neturl.Parse(url); err == nil && strings.HasSuffix(u.Path, "/transportations") {
 				if listID == "" {
 					listID = id
 					newest = pausedAt[id]
@@ -141,12 +169,32 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 		}
 		pendingMu.Unlock()
 		if listID == "" {
-			chromedp.Run(ctx, chromedp.Sleep(400*time.Millisecond))
+			if err := chromedp.Run(ctx, chromedp.Sleep(400*time.Millisecond)); err != nil {
+				if ctx.Err() != nil {
+					continuePaused(ctx)
+					return nil, fmt.Errorf("context cancelled during wait: %w", ctx.Err())
+				}
+				log.Printf("FetchNotesAPI: sleep error: %v", err)
+			}
 		}
 	}
 	if listID == "" {
+		pendingMu.Lock()
+		urls := make([]string, 0, len(pending))
+		for _, u := range pending {
+			urls = append(urls, u)
+		}
+		pendingMu.Unlock()
+
+		var loc string
+		chromedp.Run(ctx, chromedp.Location(&loc))
+
+		log.Printf("FetchNotesAPI: таймаут %ds, pending=%d, urls=%v, location=%s",
+			timeoutSec, len(urls), urls, loc)
+
 		continuePaused(ctx)
-		return nil, fmt.Errorf("не перехвачен запрос /transportations за %ds", timeoutSec)
+		return nil, fmt.Errorf("не перехвачен запрос /transportations за %ds (pending=%d, loc=%s)",
+			timeoutSec, len(urls), loc)
 	}
 
 	// Читаем тело (запрос ещё в паузе — тело гарантированно доступно).
@@ -200,7 +248,7 @@ func continuePaused(ctx context.Context) {
 	for id := range pending {
 		ids = append(ids, id)
 	}
-	pending = map[fetch.RequestID]bool{}
+	pending = map[fetch.RequestID]string{}
 	pausedAt = map[fetch.RequestID]time.Time{}
 	pendingMu.Unlock()
 
@@ -409,8 +457,21 @@ func MonitorAPI(
 			log.Printf("MonitorAPI: ошибка получения накладных: %v", err)
 
 			fetchFails++
+			errStr := err.Error()
 
+			// Немедленный алерт на критические ошибки:
+			// reload не выполнился, context отменён, браузер завис.
+			isCritical := strings.Contains(errStr, "reload:") ||
+				strings.Contains(errStr, "context cancelled") ||
+				strings.Contains(errStr, "общий таймаут")
+
+			if tel != nil && isCritical {
+				tel.Sendf("🔴 MonitorAPI: критическая ошибка: %v", err)
+			}
+
+			// Эскалация при повторяющихся таймаутах перехвата.
 			if tel != nil &&
+				!isCritical &&
 				fetchFails >= 3 &&
 				time.Since(lastFetchAlert) >= 10*time.Minute {
 
