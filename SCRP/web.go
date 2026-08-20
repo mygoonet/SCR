@@ -77,34 +77,6 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Подсчёт ошибок и проверка времени последнего fetch
-	errorCount := 0
-	var lastCreated time.Time
-	if len(items) > 0 {
-		lastCreated = items[0].created
-	}
-	for _, it := range items {
-		dir := filepath.Join(screenshotDir, it.num)
-		if b, err := os.ReadFile(filepath.Join(dir, "note.json")); err == nil {
-			var nf NoteFileJSON
-			if json.Unmarshal(b, &nf) == nil {
-				if nf.Error != "" || nf.Status == "failed" {
-					errorCount++
-				}
-			}
-		}
-	}
-	if errorCount > 0 {
-		fmt.Fprintf(w, "<p style='color:red'>Ошибки по накладным: %d</p>", errorCount)
-	}
-	if !lastCreated.IsZero() {
-		if time.Since(lastCreated) > 2*time.Hour {
-			fmt.Fprintf(w, "<p style='color:orange'>Внимание: последнее обновление накладных %s (более 2 часов назад)</p>", lastCreated.Format(timeLayout))
-		} else {
-			fmt.Fprintf(w, "<p>Последнее обновление: %s</p>", lastCreated.Format(timeLayout))
-		}
-	}
-
 	fmt.Fprint(w, `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">
 	<tr><th>Номер</th><th>Создано</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Ошибка</th><th>Скриншоты</th></tr>`)
 
