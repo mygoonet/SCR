@@ -198,13 +198,11 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(w, "<h3>Список накладных из последнего тикера (%d)</h3><pre>", len(notesCopy))
-	ts := now.Format("2006/01/02 15:04:05")
 	if len(notesCopy) == 0 {
 		fmt.Fprint(w, "Нет накладных в последнем тикере\n")
 	} else {
 		for _, n := range notesCopy {
-			line := fmt.Sprintf("%s   %s  от %s  %s → %s  %s",
-				ts,
+			line := fmt.Sprintf("%s  от %s  %s → %s  %s",
 				n.Number,
 				n.Date,
 				html.EscapeString(n.Consignor),
