@@ -48,6 +48,15 @@ var (
 	pausedAt  = map[fetch.RequestID]time.Time{}
 )
 
+// lastFetchMu/lastFetchTime/lastNotes — состояние последнего успешного тикера для веб-интерфейса
+var (
+	lastFetchMu     sync.Mutex
+	lastFetchTime   time.Time
+	lastNotes       []DeliveryNote
+	lastFetchError  string
+	signingFailures []string
+)
+
 // startTransportationsCapture включает fetch-домен и перехватывает в
 // response-stage запросы, чей URL заканчивается на /transportations.
 // Запрос удерживается в паузе до обработки в основном потоке
@@ -395,6 +404,9 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 			if tel != nil {
 				tel.Sendf(">>> Накладная %s не подписана после 3 попыток — не смогу подписать, пропускаю", n.Number)
 			}
+			lastFetchMu.Lock()
+			signingFailures = append(signingFailures, fmt.Sprintf("%s — не подписана после 3 попыток", n.Number))
+			lastFetchMu.Unlock()
 		} else {
 			nl.SetStatus("signed", "")
 			firstErr = nil
@@ -452,6 +464,11 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 		if err != nil {
 			log.Printf("MonitorAPI: ошибка получения накладных: %v", err)
 
+			lastFetchMu.Lock()
+			lastFetchError = err.Error()
+			lastFetchTime = time.Now()
+			lastFetchMu.Unlock()
+
 			fetchFails++
 			errStr := err.Error()
 
@@ -484,6 +501,12 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 		}
 
 		fetchFails = 0
+
+		lastFetchMu.Lock()
+		lastFetchTime = time.Now()
+		lastNotes = append([]DeliveryNote(nil), notes...)
+		lastFetchError = ""
+		lastFetchMu.Unlock()
 
 		log.Printf("MonitorAPI: накладные (%d):", len(notes))
 

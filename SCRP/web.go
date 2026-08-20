@@ -77,8 +77,36 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Подсчёт ошибок и проверка времени последнего fetch
+	errorCount := 0
+	var lastCreated time.Time
+	if len(items) > 0 {
+		lastCreated = items[0].created
+	}
+	for _, it := range items {
+		dir := filepath.Join(screenshotDir, it.num)
+		if b, err := os.ReadFile(filepath.Join(dir, "note.json")); err == nil {
+			var nf NoteFileJSON
+			if json.Unmarshal(b, &nf) == nil {
+				if nf.Error != "" || nf.Status == "failed" {
+					errorCount++
+				}
+			}
+		}
+	}
+	if errorCount > 0 {
+		fmt.Fprintf(w, "<p style='color:red'>Ошибки по накладным: %d</p>", errorCount)
+	}
+	if !lastCreated.IsZero() {
+		if time.Since(lastCreated) > 2*time.Hour {
+			fmt.Fprintf(w, "<p style='color:orange'>Внимание: последнее обновление накладных %s (более 2 часов назад)</p>", lastCreated.Format(timeLayout))
+		} else {
+			fmt.Fprintf(w, "<p>Последнее обновление: %s</p>", lastCreated.Format(timeLayout))
+		}
+	}
+
 	fmt.Fprint(w, `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">
-	<tr><th>Номер</th><th>Создано</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Скриншоты</th></tr>`)
+	<tr><th>Номер</th><th>Создано</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Ошибка</th><th>Скриншоты</th></tr>`)
 
 	for _, it := range items {
 		num := it.num
@@ -94,6 +122,15 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "<td>%s → %s</td>",
 			html.EscapeString(nf.Consignor), html.EscapeString(nf.Consignee))
 		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.Status))
+		errMsg := html.EscapeString(nf.Error)
+		if errMsg == "" && nf.Status == "failed" {
+			errMsg = "failed"
+		}
+		if errMsg != "" {
+			fmt.Fprintf(w, "<td style='color:red'>%s</td>", errMsg)
+		} else {
+			fmt.Fprint(w, "<td></td>")
+		}
 
 		// Превью всех скриншотов папки (от логина до подписи).
 		fmt.Fprint(w, "<td>")
@@ -112,5 +149,69 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "</td></tr>")
 	}
 
-	fmt.Fprint(w, "</table></body></html>")
+	fmt.Fprint(w, "</table>")
+
+	// Блок критических ошибок и информации о тикере
+	fmt.Fprint(w, "<h2>Критические ошибки</h2>")
+	lastFetchMu.Lock()
+	fetchErr := lastFetchError
+	fails := make([]string, len(signingFailures))
+	copy(fails, signingFailures)
+	lastFetchMu.Unlock()
+
+	criticalItems := []string{}
+	if fetchErr != "" {
+		criticalItems = append(criticalItems, "Ошибка получения накладных: "+fetchErr)
+	}
+	criticalItems = append(criticalItems, fails...)
+	if len(criticalItems) > 0 {
+		fmt.Fprint(w, "<ul style='color:red'>")
+		for _, e := range criticalItems {
+			fmt.Fprintf(w, "<li>%s</li>", html.EscapeString(e))
+		}
+		fmt.Fprint(w, "</ul>")
+	} else {
+		fmt.Fprint(w, "<p>Критических ошибок нет</p>")
+	}
+
+	now := time.Now()
+
+	// Читаем состояние последнего тикера
+	lastFetchMu.Lock()
+	tickerTime := lastFetchTime
+	notesCopy := make([]DeliveryNote, len(lastNotes))
+	copy(notesCopy, lastNotes)
+	lastFetchMu.Unlock()
+
+	fmt.Fprintf(w, "<h3>Время обновления тикера</h3>")
+	if tickerTime.IsZero() {
+		fmt.Fprint(w, "<p>Нет данных о последнем обновлении тикера</p>")
+	} else {
+		diff := now.Sub(tickerTime)
+		roundedMin := int(diff.Minutes())
+		if diff.Minutes()-float64(roundedMin) >= 0.5 {
+			roundedMin++
+		}
+		fmt.Fprintf(w, "<p>Последнее обновление тикера: %s</p>", tickerTime.Format("2006/01/02 15:04:05"))
+		fmt.Fprintf(w, "<p>Текущее время: %s</p>", now.Format("2006/01/02 15:04:05"))
+		fmt.Fprintf(w, "<p><b>Прошло с последнего успешного тикера: %d мин</b></p>", roundedMin)
+	}
+
+	fmt.Fprintf(w, "<h3>Список накладных из последнего тикера (%d)</h3><pre>", len(notesCopy))
+	ts := now.Format("2006/01/02 15:04:05")
+	if len(notesCopy) == 0 {
+		fmt.Fprint(w, "Нет накладных в последнем тикере\n")
+	} else {
+		for _, n := range notesCopy {
+			line := fmt.Sprintf("%s   %s  от %s  %s → %s  %s",
+				ts,
+				n.Number,
+				n.Date,
+				html.EscapeString(n.Consignor),
+				html.EscapeString(n.Consignee),
+				html.EscapeString(n.Carrier))
+			fmt.Fprintf(w, "%s\n", line)
+		}
+	}
+	fmt.Fprint(w, "</pre></body></html>")
 }
