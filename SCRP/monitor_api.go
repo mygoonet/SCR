@@ -91,10 +91,16 @@ func startTransportationsCapture(ctx context.Context) {
 		// иначе пауза negotiate блокирует SPA и список никогда не придет (дедлок 30s).
 		if u, err := neturl.Parse(url); err == nil {
 			if strings.Contains(u.Path, "/negotiate") || !strings.HasSuffix(u.Path, "/transportations") {
-				// не держим в паузе - отпускаем немедленно в отдельном таске чтобы не блокировать ListenTarget
-				go chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
-					return fetch.ContinueResponse(e.RequestID).Do(c)
-				}))
+				// не держим в паузе - отпускаем немедленно (в фоне, не блокируем ListenTarget)
+				reqID := e.RequestID
+				go func() {
+					// фоном на коротком таймауте, ctx может быть уже в deadline
+					bg, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					chromedp.Run(bg, chromedp.ActionFunc(func(c context.Context) error {
+						return fetch.ContinueResponse(reqID).Do(c)
+					}))
+				}()
 				return
 			}
 		}
@@ -110,23 +116,33 @@ func startTransportationsCapture(ctx context.Context) {
 // reloadNotesAPI перезагружает страницу, заставляя SPA сделать свежий
 // запрос /transportations (актуальные токены), и даёт 5с на старт.
 // Если текущая страница - waybill (/sign/waybill), Reload бесполезен (лог 10:11:42 location=.../waybill
-// -> pending только negotiate) - возвращаемся на список через NavigateToCarrier.
+// -> pending только negotiate) - делаем быстрый возврат на список без waitForTableRows
+// (waitForTableRows под паузой fetch дедлочит 30с).
 func reloadNotesAPI(ctx context.Context) error {
 	var loc string
 	chromedp.Run(ctx, chromedp.Location(&loc))
 	if strings.Contains(loc, "/sign/") || strings.Contains(loc, "/waybill") {
-		log.Printf("reloadNotesAPI: на waybill %s -> возврат на список", loc)
-		if err := NavigateToCarrier(ctx); err != nil {
-			// fallback - прямой переход назад
-			chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
-				return network.SetCacheDisabled(true).Do(c)
-			}))
-			// пробуем историю назад
-			chromedp.Run(ctx, chromedp.NavigateBack())
-			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
-			return NavigateToCarrier(ctx)
+		log.Printf("reloadNotesAPI: на waybill %s -> быстрый возврат на список", loc)
+		// Продолжаем все паузы чтобы разблокировать SPA перед навигацией
+		continuePaused(ctx)
+		// Esc закрывает SidePage, если не помогло - прямой Navigate на /carrier
+		chromedp.Run(ctx, chromedp.KeyEvent("\x1b"))
+		chromedp.Run(ctx, chromedp.Sleep(800*time.Millisecond))
+		chromedp.Run(ctx, chromedp.Location(&loc))
+		if strings.Contains(loc, "/sign") || strings.Contains(loc, "/waybill") {
+			// Вырезаем хвост до /carrier - https://logist.kontur.ru/<box>/carrier
+			if idx := strings.Index(loc, "/carrier"); idx != -1 {
+				listURL := loc[:idx+len("/carrier")]
+				log.Printf("reloadNotesAPI: прямой Navigate %s", listURL)
+				chromedp.Run(ctx, chromedp.Navigate(listURL))
+			} else {
+				chromedp.Run(ctx, chromedp.NavigateBack())
+			}
 		}
-		chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
+		chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+			return network.SetCacheDisabled(true).Do(c)
+		}))
+		chromedp.Run(ctx, chromedp.Sleep(4*time.Second))
 		return nil
 	}
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
@@ -145,11 +161,11 @@ func reloadNotesAPI(ctx context.Context) error {
 
 // FetchNotesAPI получает список накладных, перехватив ответ SPA.
 // timeoutSec — сколько секунд ждём появления/тела ответа.
-// Общий таймаут = timeoutSec + 15с на каждую попытку (ретрай на свежем контексте,
-// иначе вторая попытка гарантированно ловит context deadline exceeded как в логах 10:11:52).
+// Общий таймаут = timeoutSec + 30с на каждую попытку (запас на reload+навигацию waybill+GetResponseBody),
+// ретрай на свежем контексте иначе вторая попытка ловит deadline exceeded как в 10:11:52 и 11:19:37.
 func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) {
 	withTimeout := func(parent context.Context) (context.Context, context.CancelFunc) {
-		return context.WithTimeout(parent, time.Duration(timeoutSec+15)*time.Second)
+		return context.WithTimeout(parent, time.Duration(timeoutSec+30)*time.Second)
 	}
 
 	outerCtx, outerCancel := withTimeout(ctx)
