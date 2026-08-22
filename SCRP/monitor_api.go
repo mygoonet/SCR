@@ -87,6 +87,17 @@ func startTransportationsCapture(ctx context.Context) {
 		if e.Request != nil {
 			url = e.Request.URL
 		}
+		// negotiate и прочие /transportations/* кроме точного /transportations - сразу пропускаем,
+		// иначе пауза negotiate блокирует SPA и список никогда не придет (дедлок 30s).
+		if u, err := neturl.Parse(url); err == nil {
+			if strings.Contains(u.Path, "/negotiate") || !strings.HasSuffix(u.Path, "/transportations") {
+				// не держим в паузе - отпускаем немедленно в отдельном таске чтобы не блокировать ListenTarget
+				go chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+					return fetch.ContinueResponse(e.RequestID).Do(c)
+				}))
+				return
+			}
+		}
 		log.Printf("fetch-intercept: %s", url)
 
 		pendingMu.Lock()
@@ -97,8 +108,27 @@ func startTransportationsCapture(ctx context.Context) {
 }
 
 // reloadNotesAPI перезагружает страницу, заставляя SPA сделать свежий
-// запрос /transportations (актуальные токены), и даёт 3с на старт.
+// запрос /transportations (актуальные токены), и даёт 5с на старт.
+// Если текущая страница - waybill (/sign/waybill), Reload бесполезен (лог 10:11:42 location=.../waybill
+// -> pending только negotiate) - возвращаемся на список через NavigateToCarrier.
 func reloadNotesAPI(ctx context.Context) error {
+	var loc string
+	chromedp.Run(ctx, chromedp.Location(&loc))
+	if strings.Contains(loc, "/sign/") || strings.Contains(loc, "/waybill") {
+		log.Printf("reloadNotesAPI: на waybill %s -> возврат на список", loc)
+		if err := NavigateToCarrier(ctx); err != nil {
+			// fallback - прямой переход назад
+			chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+				return network.SetCacheDisabled(true).Do(c)
+			}))
+			// пробуем историю назад
+			chromedp.Run(ctx, chromedp.NavigateBack())
+			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
+			return NavigateToCarrier(ctx)
+		}
+		chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
+		return nil
+	}
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return network.SetCacheDisabled(true).Do(ctx)
 	})); err != nil {
@@ -107,7 +137,7 @@ func reloadNotesAPI(ctx context.Context) error {
 	if err := chromedp.Run(ctx, chromedp.Reload()); err != nil {
 		return fmt.Errorf("Reload: %w", err)
 	}
-	if err := chromedp.Run(ctx, chromedp.Sleep(3*time.Second)); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Sleep(5*time.Second)); err != nil {
 		return fmt.Errorf("Sleep after reload: %w", err)
 	}
 	return nil
@@ -115,23 +145,36 @@ func reloadNotesAPI(ctx context.Context) error {
 
 // FetchNotesAPI получает список накладных, перехватив ответ SPA.
 // timeoutSec — сколько секунд ждём появления/тела ответа.
-// Общий таймаут = timeoutSec + 15с (запас на reload/continuePaused/GetResponseBody).
+// Общий таймаут = timeoutSec + 15с на каждую попытку (ретрай на свежем контексте,
+// иначе вторая попытка гарантированно ловит context deadline exceeded как в логах 10:11:52).
 func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) {
-	outerCtx, outerCancel := context.WithTimeout(ctx, time.Duration(timeoutSec+15)*time.Second)
-	defer outerCancel()
+	withTimeout := func(parent context.Context) (context.Context, context.CancelFunc) {
+		return context.WithTimeout(parent, time.Duration(timeoutSec+15)*time.Second)
+	}
 
+	outerCtx, outerCancel := withTimeout(ctx)
 	notes, err := fetchNotesAPICtx(outerCtx, timeoutSec)
+	outerCancel()
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "Invalid InterceptionId") {
-			log.Printf("FetchNotesAPI: протухший перехват, повторяю (ретрая)...")
-			continuePaused(outerCtx)
-			notes, err = fetchNotesAPICtx(outerCtx, timeoutSec)
+			log.Printf("FetchNotesAPI: протухший перехват, повторяю (ретрай на свежем контексте)...")
+			continuePaused(ctx)
+			retryCtx, retryCancel := withTimeout(ctx)
+			defer retryCancel()
+			notes, err = fetchNotesAPICtx(retryCtx, timeoutSec)
 		} else if strings.Contains(errStr, "не перехвачен запрос") {
-			log.Printf("FetchNotesAPI: таймаут перехвата, повторяю...")
-			notes, err = fetchNotesAPICtx(outerCtx, timeoutSec)
-		} else if outerCtx.Err() != nil {
+			log.Printf("FetchNotesAPI: таймаут перехвата, повторяю (ретрай на свежем контексте)...")
+			continuePaused(ctx)
+			// маленькая пауза чтобы SPA отошла после Continue
+			chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
+			retryCtx, retryCancel := withTimeout(ctx)
+			defer retryCancel()
+			notes, err = fetchNotesAPICtx(retryCtx, timeoutSec)
+		} else if ctx.Err() != nil {
 			log.Printf("FetchNotesAPI: общий таймаут (browser завис?): %v", err)
+		} else if outerCtx.Err() != nil {
+			log.Printf("FetchNotesAPI: таймаут попытки: %v", err)
 		}
 	}
 	return notes, err

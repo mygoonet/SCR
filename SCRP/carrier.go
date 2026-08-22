@@ -16,7 +16,25 @@ func NavigateToCarrier(ctx context.Context) error {
 	log.Printf("NavigateToCarrier: enter url=%s", url)
 	takeScreenshot(ctx, "nav_carrier_enter")
 
-	if strings.Contains(url, "/carrier/") {
+	if strings.Contains(url, "/carrier/sign") || strings.Contains(url, "/waybill") {
+		log.Printf("NavigateToCarrier: на waybill/sign -> возврат назад")
+		// Закрываем SidePage/waybill: Esc + либо NavigateBack
+		for i := 0; i < 2; i++ {
+			chromedp.Run(ctx, chromedp.KeyEvent("\x1b"))
+			chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
+		}
+		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+		chromedp.Run(ctx, chromedp.Location(&url))
+		if strings.Contains(url, "/sign") || strings.Contains(url, "/waybill") {
+			// fallback через историю
+			chromedp.Run(ctx, chromedp.NavigateBack())
+			chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
+			chromedp.Run(ctx, chromedp.Location(&url))
+		}
+		// после возврата ждем таблицу списка
+		return waitForTableRows(ctx)
+	}
+	if strings.Contains(url, "/carrier/") || strings.Contains(url, "/carrier") {
 		log.Println("NavigateToCarrier: already on carrier page")
 		return waitForTableRows(ctx)
 	}
