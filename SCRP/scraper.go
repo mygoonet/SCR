@@ -41,7 +41,7 @@ func Monitor(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan Mon
 		return
 	}
 
-	interval := 10 * time.Minute
+	interval := 360 * time.Minute
 	autoSign := true
 
 	log.Println("Monitor запущен. Тикер:", interval)
