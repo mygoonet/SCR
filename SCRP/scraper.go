@@ -26,7 +26,7 @@ var skipNumbers = map[string]bool{
 	"000011646": true,
 	"000011645": true,
 
-	"000010269": true,
+	//"000010269": true,
 	"000000420": true, //<--- dont remove//
 }
 
