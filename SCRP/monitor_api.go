@@ -492,20 +492,70 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 }
 func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan MonitorCmd) {
 
-	session := browser.NewSession()
-	defer session.Close()
+	var session *Session
+	var ctx context.Context
+	sessionStartedAt := time.Now()
+	restartCount := 0
 
-	ctx := session.Ctx()
+	// startSession создает новую сессию, инициализирует и включает fetch-перехват
+	startSession := func() error {
+		session = browser.NewSession()
+		ctx = session.Ctx()
+		if err := initSession(ctx, cfg); err != nil {
+			session.Close()
+			return fmt.Errorf("init session: %w", err)
+		}
+		startTransportationsCapture(ctx)
+		sessionStartedAt = time.Now()
+		return nil
+	}
 
-	if err := initSession(ctx, cfg); err != nil {
+	// restartSession закрывает текущую сессию и создает новую (при зависании хрома/CDP)
+	restartSession := func(reason string) error {
+		log.Printf("MonitorAPI: перезапуск сессии (reason=%s, uptime=%v, restarts=%d)", reason, time.Since(sessionStartedAt), restartCount)
+		if tel != nil {
+			tel.Sendf("🔄 MonitorAPI: перезапуск сессии (reason=%s, uptime=%v, restarts=%d)", reason, time.Since(sessionStartedAt).Round(time.Minute), restartCount)
+		}
+		if session != nil {
+			session.Close()
+		}
+		if err := startSession(); err != nil {
+			return err
+		}
+		restartCount++
+		return nil
+	}
+
+	// healthCheck проверяет, что хром target отвечает на CDP команды (5s timeout)
+	// Если не отвечает → target завис, нужен restartSession
+	healthCheck := func() bool {
+		if ctx == nil {
+			return false
+		}
+		checkCtx, checkCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer checkCancel()
+		var loc string
+		err := chromedp.Run(checkCtx, chromedp.Location(&loc))
+		if err != nil {
+			log.Printf("MonitorAPI: health check failed: %v (ctx.Err=%v)", err, ctx.Err())
+			return false
+		}
+		return true
+	}
+
+	// Первая сессия
+	if err := startSession(); err != nil {
 		log.Printf("MonitorAPI: init session: %v", err)
 		if tel != nil {
 			tel.Sendf("❌ MonitorAPI: init session: %v", err)
 		}
 		return
 	}
-
-	startTransportationsCapture(ctx)
+	defer func() {
+		if session != nil {
+			session.Close()
+		}
+	}()
 
 	interval := 360 * time.Second
 	autoSign := true
@@ -514,6 +564,10 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 	fetchFails := 0
 	lastFetchAlert := time.Time{}
 	tickCount := 0 // каждых 3 обход очищаем giveUp
+
+	// Профилактический рестарт каждые 24 часа (деградация хрома/CDP со временем)
+	const prophylacticRestartInterval = 24 * time.Hour
+	lastProphylacticRestart := time.Now()
 
 	log.Println("MonitorAPI запущен. Тикер:", interval)
 
@@ -525,6 +579,27 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 	// Один полный обход сразу при старте.
 	checkAndSign := func() {
 		tickCount++
+
+		// Профилактический рестарт каждые 24 часа
+		if time.Since(lastProphylacticRestart) > prophylacticRestartInterval {
+			log.Printf("MonitorAPI: профилактический рестарт (24h)")
+			if err := restartSession("prophylactic 24h"); err != nil {
+				log.Printf("MonitorAPI: prophylactic restart failed: %v", err)
+				return
+			}
+			lastProphylacticRestart = time.Now()
+			// После рестарта пропускаем этот тик, следующий будет через interval
+			return
+		}
+
+		// Health-check перед каждым тиком: если хром завис → рестарт сессии
+		if !healthCheck() {
+			if err := restartSession("health check failed"); err != nil {
+				log.Printf("MonitorAPI: restart after health check failed: %v", err)
+				return
+			}
+			// После рестарта пробуем еще раз в этом тике
+		}
 
 		if tickCount%3 == 0 {
 			giveUp = map[string]bool{}
