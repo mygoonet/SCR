@@ -143,9 +143,13 @@ func reloadNotesAPI(ctx context.Context) error {
 			if idx := strings.Index(loc, "/carrier"); idx != -1 {
 				listURL := loc[:idx+len("/carrier")]
 				log.Printf("reloadNotesAPI: прямой Navigate %s", listURL)
-				chromedp.Run(ctx, chromedp.Navigate(listURL))
+				if navErr := chromedp.Run(ctx, chromedp.Navigate(listURL)); navErr != nil {
+					log.Printf("reloadNotesAPI: Navigate error: %v (ctx.Err=%v)", navErr, ctx.Err())
+				}
 			} else {
-				chromedp.Run(ctx, chromedp.NavigateBack())
+				if navErr := chromedp.Run(ctx, chromedp.NavigateBack()); navErr != nil {
+					log.Printf("reloadNotesAPI: NavigateBack error: %v (ctx.Err=%v)", navErr, ctx.Err())
+				}
 			}
 		}
 		// Увеличен пауза 4s->7s: SPA медленная, 4s недостаточно, хром остается в рендере
@@ -256,6 +260,9 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 					return nil, fmt.Errorf("context cancelled during wait: %w", ctx.Err())
 				}
 				log.Printf("FetchNotesAPI: sleep error: %v", err)
+				// Защита от быстрого спина при потере CDP-коннекта:
+				// chromedp.Sleep упал, но ctx жив — ждём обычным time.Sleep.
+				time.Sleep(400 * time.Millisecond)
 			}
 		}
 	}
@@ -323,7 +330,14 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 }
 
 // continuePaused отпускает все перехваченные запросы, чтобы страница не висела.
+// Если ctx уже мёртв (timeout/cancel) — CDP-команды на нём не пройдут и паузы
+// останутся висеть; в этом случае используем свежий фоновый контекст с 5s таймаутом.
 func continuePaused(ctx context.Context) {
+	if ctx.Err() != nil {
+		bg, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ctx = bg
+	}
 	pendingMu.Lock()
 	ids := make([]fetch.RequestID, 0, len(pending))
 	for id := range pending {
@@ -429,7 +443,9 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 				// не работают, т.к. fetch-перехват держит /transportations в паузе
 				// и таблица не рендерится. FetchNotesAPI перехватывает запрос,
 				// читает тело и отпускает его — после этого таблица рисуется.
-				FetchNotesAPI(ctx, 20)
+				if _, refreshErr := FetchNotesAPI(ctx, 20); refreshErr != nil {
+					nl.Logf(">>> refresh после ошибки подписания: %v", refreshErr)
+				}
 				waitForTableRows(ctx)
 				continue
 			}
@@ -478,6 +494,10 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 			}
 			lastFetchMu.Lock()
 			signingFailures = append(signingFailures, fmt.Sprintf("%s — не подписана после 3 попыток", n.Number))
+			// Не даём слайсу расти бесконечно — держим последние 50.
+			if len(signingFailures) > 50 {
+				signingFailures = signingFailures[len(signingFailures)-50:]
+			}
 			lastFetchMu.Unlock()
 		} else {
 			nl.SetStatus("signed", "")
@@ -693,7 +713,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 		// Убираем накладные, которые ранее окончательно
 		// не удалось подписать.
-		filtered := todo[:0]
+		filtered := make([]DeliveryNote, 0, len(todo))
 
 		for _, n := range todo {
 			if !giveUp[n.Number] {
