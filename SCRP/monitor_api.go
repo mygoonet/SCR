@@ -21,20 +21,144 @@ type apiDriver struct {
 	MiddleName string `json:"middleName"`
 }
 
+// apiPossibleAction — элемент possibleActions накладной.
+type apiPossibleAction struct {
+	Name        string `json:"name"`
+	IsAvailable bool   `json:"isAvailable"`
+}
+
+// apiPerson — подписант (sender/recipient) в метаданных.
+type apiPerson struct {
+	ActionDate         string `json:"actionDate"`
+	IsRejected         bool   `json:"isRejected"`
+	IsInvalidSignature bool   `json:"isInvalidSignature"`
+	Position           string `json:"position"`
+	FirstName          string `json:"firstName"`
+	LastName           string `json:"lastName"`
+	MiddleName         string `json:"middleName"`
+}
+
+// apiPlannedWeight — планируемый вес позиции груза.
+type apiPlannedWeight struct {
+	GrossWeight float64 `json:"grossWeight"`
+}
+
+// apiCargoItem — позиция груза в cargoInfo.
+type apiCargoItem struct {
+	Name                string            `json:"name"`
+	CodeTnved           string            `json:"codeTnved"`
+	Condition           string            `json:"condition"`
+	PackageMethod       string            `json:"packageMethod"`
+	ContainerType       string            `json:"containerType"`
+	CargoSpaceQuantity  int               `json:"cargoSpaceQuantity"`
+	Marks               []string          `json:"marks"`
+	DangerousItems      []json.RawMessage `json:"dangerousItems"`
+	TransportContainers []json.RawMessage `json:"transportContainers"`
+	PlannedWeight       apiPlannedWeight  `json:"plannedWeight"`
+}
+
+// apiCargoInfo — блок cargoInfo в метаданных.
+type apiCargoInfo struct {
+	Items []apiCargoItem `json:"items"`
+}
+
+// apiPowerOfAttorney — доверенность получателя (recipientTitleInfo).
+type apiPowerOfAttorney struct {
+	StatusVerification struct {
+		StatusType string `json:"statusType"`
+	} `json:"statusVerification"`
+}
+
+// apiRecipientTitleInfo — recipientTitleInfo в метаданных.
+type apiRecipientTitleInfo struct {
+	PowerOfAttorney apiPowerOfAttorney `json:"powerOfAttorney"`
+}
+
+// apiReceptionMetadata — метаданные приёмки/сдачи (receptionMetadata,
+// deliveryMetadata и элементы *RevisionsMetadata имеют одинаковую форму).
+type apiReceptionMetadata struct {
+	ID                       string                `json:"id"`
+	TitleVersion             string                `json:"titleVersion"`
+	ActualCargoCondition     string                `json:"actualCargoCondition"`
+	PlannedShippingDate      string                `json:"plannedShippingDate"`
+	ActionStartedAt          string                `json:"actionStartedAt"`
+	ActionFinishedAt         string                `json:"actionFinishedAt"`
+	ActionStartedAtUtcOffset string                `json:"actionStartedAtUtcOffset"`
+	NumberOfCargoSpaces      string                `json:"numberOfCargoSpaces"`
+	MassBrutto               string                `json:"massBrutto"`
+	MassBruttoUnits          string                `json:"massBruttoUnits"`
+	Sender                   apiPerson             `json:"sender"`
+	Recipient                apiPerson             `json:"recipient"`
+	TruckInfo                string                `json:"truckInfo"`
+	ControllerResolutions    []json.RawMessage     `json:"controllerResolutions"`
+	CargoInfo                apiCargoInfo          `json:"cargoInfo"`
+	SenderTitleInfo          json.RawMessage       `json:"senderTitleInfo"`
+	RecipientTitleInfo       apiRecipientTitleInfo `json:"recipientTitleInfo"`
+	HasConsigneeNotes        bool                  `json:"hasConsigneeNotes"`
+	DeliveryType             string                `json:"deliveryType"`
+}
+
+// apiAttachmentDocuments — вложения накладной.
+type apiAttachmentDocuments struct {
+	Attachments []json.RawMessage `json:"attachments"`
+}
+
 type apiTransportation struct {
-	ID            string    `json:"id"`
-	WaybillNumber string    `json:"waybillNumber"`
-	WaybillDate   string    `json:"waybillDate"`
-	ConsignorName string    `json:"consignorName"`
-	ConsigneeName string    `json:"consigneeName"`
-	CarrierName   string    `json:"carrierName"`
+	ID            string `json:"id"`
+	WaybillNumber string `json:"waybillNumber"`
+	WaybillDate   string `json:"waybillDate"`
+	OrderNumber   string `json:"orderNumber"`
+	OrderDate     string `json:"orderDate"`
+	CargoName     string `json:"cargoName"`
+
+	ConsignorName    string `json:"consignorName"`
+	ConsignorAddress string `json:"consignorAddress"`
+	ReceptionAddress string `json:"receptionAddress"`
+
+	ConsigneeName    string `json:"consigneeName"`
+	ConsigneeAddress string `json:"consigneeAddress"`
+	DeliveryAddress  string `json:"deliveryAddress"`
+
+	CarrierName    string `json:"carrierName"`
+	CarrierAddress string `json:"carrierAddress"`
+
 	CurrentDriver apiDriver `json:"currentDriver"`
 	TruckInfo     string    `json:"truckInfo"`
+
+	ReceptionMetadata          *apiReceptionMetadata  `json:"receptionMetadata"`
+	DeliveryMetadata           *apiReceptionMetadata  `json:"deliveryMetadata"`
+	ReceptionRevisionsMetadata []apiReceptionMetadata `json:"receptionRevisionsMetadata"`
+	DeliveryRevisionsMetadata  []apiReceptionMetadata `json:"deliveryRevisionsMetadata"`
+	RelayMetadata              []json.RawMessage      `json:"relayMetadata"`
+	ReaddressMetadata          []json.RawMessage      `json:"readdressMetadata"`
+
+	IsObservable         bool   `json:"isObservable"`
+	IsTestTransportation bool   `json:"isTestTransportation"`
+	Status               string `json:"status"`
+	StatusText           string `json:"statusText"`
+	CreatedAt            string `json:"createdAt"`
+	ModifiedAt           string `json:"modifiedAt"`
+
+	PossibleActions []apiPossibleAction `json:"possibleActions"`
+
+	IsDraftForOtherOrg          bool `json:"isDraftForOtherOrg"`
+	IsReceptionRevisionUnsigned bool `json:"isReceptionRevisionUnsigned"`
+	IsDeliveryRevisionUnsigned  bool `json:"isDeliveryRevisionUnsigned"`
+	IsDeliveredPartially        bool `json:"isDeliveredPartially"`
+	IsDeliveryRejected          bool `json:"isDeliveryRejected"`
+
+	AttachmentDocuments     apiAttachmentDocuments `json:"attachmentDocuments"`
+	ConsigneeAdditionalInfo []json.RawMessage      `json:"consigneeAdditionalInfo"`
+	ConsignorAdditionalInfo []json.RawMessage      `json:"consignorAdditionalInfo"`
+	FormatVersion           string                 `json:"formatVersion"`
 }
 
 type apiTransportations struct {
-	Items      []apiTransportation `json:"items"`
-	TotalCount int                 `json:"totalCount"`
+	Items          []apiTransportation `json:"items"`
+	HasMoreResults bool                `json:"hasMoreResults"`
+	TotalCount     int                 `json:"totalCount"`
+	CurrentPage    int                 `json:"currentPage"`
+	TotalPages     int                 `json:"totalPages"`
 }
 
 // pending хранит перехваченные (паузнутые в response-stage) запросы к
@@ -315,14 +439,17 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 			continue
 		}
 		n := DeliveryNote{
-			Number:      it.WaybillNumber,
-			Date:        it.WaybillDate,
-			Consignor:   it.ConsignorName,
-			Consignee:   it.ConsigneeName,
-			Carrier:     it.CarrierName,
-			Driver:      driverFullName(it.CurrentDriver),
-			DriverPhone: it.CurrentDriver.Phone,
-			Truck:       it.TruckInfo,
+			Number:           it.WaybillNumber,
+			Date:             it.WaybillDate,
+			Consignor:        it.ConsignorName,
+			ConsignorAddress: it.ConsignorAddress,
+			Consignee:        it.ConsigneeName,
+			ConsigneeAddress: it.ConsigneeAddress,
+			Carrier:          it.CarrierName,
+			Driver:           driverFullName(it.CurrentDriver),
+			DriverPhone:      it.CurrentDriver.Phone,
+			Truck:            it.TruckInfo,
+			CreatedAt:        formatCreatedAt(it.CreatedAt),
 		}
 		notes = append(notes, n)
 	}
@@ -357,6 +484,19 @@ func continuePaused(ctx context.Context) {
 			return err
 		}))
 	}
+}
+
+// formatCreatedAt переводит createdAt из UTC (RFC3339) в локальное время
+// в формате "02.01 15:04". При ошибке парсинга возвращает исходную строку.
+func formatCreatedAt(s string) string {
+	if s == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return s
+	}
+	return t.Local().Format("02.01 15:04")
 }
 
 func driverFullName(d apiDriver) string {
@@ -395,7 +535,7 @@ func TestAPI(browser *Browser, cfg Config) {
 
 	log.Printf("TestAPI: накладных %d:", len(notes))
 	for _, n := range notes {
-		log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
+		log.Printf("  %s  от %s  создан %s  %s → %s  %s", n.Number, n.Date, n.CreatedAt, n.Consignor, n.Consignee, n.Carrier)
 	}
 }
 
@@ -679,9 +819,10 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 		for _, n := range notes {
 			log.Printf(
-				"  %s  от %s  %s → %s  %s",
+				"  %s  от %s  создан %s  %s → %s  %s",
 				n.Number,
 				n.Date,
+				n.CreatedAt,
 				n.Consignor,
 				n.Consignee,
 				n.Carrier,

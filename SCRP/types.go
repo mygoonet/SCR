@@ -13,6 +13,7 @@ type DeliveryNote struct {
 	Driver           string `json:"driver"`
 	DriverPhone      string `json:"driverPhone"`
 	Truck            string `json:"truck"`
+	CreatedAt        string `json:"createdAt,omitempty"` // время создания накладной (локальное)
 	Test             string `json:"test,omitempty"`
 }
 
