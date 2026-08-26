@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	neturl "net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -518,17 +519,49 @@ func continuePaused(ctx context.Context, cs *captureState) {
 	}
 }
 
-// formatCreatedAt переводит createdAt из UTC (RFC3339) в локальное время
-// в формате "02.01 15:04". При ошибке парсинга возвращает исходную строку.
+// formatCreatedAt переводит createdAt из API в формат timeLayout ("2006-01-02 15:04:05").
+// Поддерживает RFC3339 (UTC, конвертируется в локальное время) и человекочитаемый
+// формат "24 августа 16:09 (UTC +08:00)" (год — текущий). При ошибке парсинга
+// возвращает исходную строку.
 func formatCreatedAt(s string) string {
 	if s == "" {
 		return ""
 	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return s
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t.Local().Format(timeLayout)
 	}
-	return t.Local().Format("02.01 15:04")
+	if t, ok := parseHumanDate(s); ok {
+		return t.Format(timeLayout)
+	}
+	return s
+}
+
+var ruMonthNames = map[string]int{
+	"января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
+	"июля": 7, "августа": 8, "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+}
+
+// parseHumanDate разбирает "24 августа 16:09 (UTC +08:00)" — время берётся как
+// есть (стеночное время сервера), год подставляется текущий.
+func parseHumanDate(s string) (time.Time, bool) {
+	fields := strings.Fields(s)
+	if len(fields) < 3 {
+		return time.Time{}, false
+	}
+	day, err := strconv.Atoi(fields[0])
+	if err != nil || day < 1 || day > 31 {
+		return time.Time{}, false
+	}
+	month, ok := ruMonthNames[fields[1]]
+	if !ok {
+		return time.Time{}, false
+	}
+	var h, m int
+	if _, err := fmt.Sscanf(fields[2], "%d:%d", &h, &m); err != nil || h > 23 || m > 59 {
+		return time.Time{}, false
+	}
+	now := time.Now()
+	return time.Date(now.Year(), time.Month(month), day, h, m, 0, 0, time.Local), true
 }
 
 func driverFullName(d apiDriver) string {

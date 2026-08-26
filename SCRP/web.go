@@ -47,7 +47,6 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		created time.Time
 	}
 	items := make([]noteItem, 0, len(entries))
-	const timeLayout = "2006-01-02 15:04:05"
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -57,9 +56,13 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		created := time.Time{}
 		if b, err := os.ReadFile(filepath.Join(dir, "note.json")); err == nil {
 			var nf NoteFileJSON
-			if json.Unmarshal(b, &nf) == nil && nf.CreatedAt != "" {
-				if t, err := time.Parse(timeLayout, nf.CreatedAt); err == nil {
-					created = t
+			if json.Unmarshal(b, &nf) == nil {
+				// Сначала реальное время создания из API, затем время обработки ботом.
+				for _, s := range []string{nf.CreatedAt, nf.ProcessedAt} {
+					if t, err := time.Parse(timeLayout, s); err == nil {
+						created = t
+						break
+					}
 				}
 			}
 		}
@@ -78,7 +81,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprint(w, `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">
-	<tr><th>Номер</th><th>Создано</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Ошибка</th><th>Скриншоты</th></tr>`)
+	<tr><th>Номер</th><th>Создано</th><th>Ботом</th><th>Дата</th><th>Отправитель → Получатель</th><th>Статус</th><th>Ошибка</th><th>Скриншоты</th></tr>`)
 
 	for _, it := range items {
 		num := it.num
@@ -90,6 +93,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Fprintf(w, "<tr><td><b>%s</b></td>", html.EscapeString(num))
 		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.CreatedAt))
+		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.ProcessedAt))
 		fmt.Fprintf(w, "<td>%s</td>", html.EscapeString(nf.Date))
 		fmt.Fprintf(w, "<td>%s → %s</td>",
 			html.EscapeString(nf.Consignor), html.EscapeString(nf.Consignee))

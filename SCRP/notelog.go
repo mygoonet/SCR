@@ -77,12 +77,14 @@ type NoteLogger struct {
 }
 
 // NoteFileJSON — формат note.json на диске: данные накладной + статус.
+// CreatedAt (из DeliveryNote) — реальное время создания документа из API;
+// ProcessedAt — когда бот впервые начал её обрабатывать.
 type NoteFileJSON struct {
 	DeliveryNote
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	Status      string `json:"status"`
+	Error       string `json:"error,omitempty"`
+	ProcessedAt string `json:"processedAt"`
+	UpdatedAt   string `json:"updatedAt"`
 }
 
 func NewNoteLogger(n DeliveryNote) *NoteLogger {
@@ -137,21 +139,20 @@ func (l *NoteLogger) SetStatus(status, errMsg string) {
 
 func (l *NoteLogger) writeNoteJSON(n DeliveryNote, status, errMsg string) {
 	path := filepath.Join(l.Dir, "note.json")
-	createdAt := time.Now().Format(timeLayout)
-	if _, err := os.Stat(path); err == nil {
-		if data, err := os.ReadFile(path); err == nil {
-			var existing NoteFileJSON
-			if json.Unmarshal(data, &existing) == nil && existing.CreatedAt != "" {
-				createdAt = existing.CreatedAt
-			}
+	now := time.Now().Format(timeLayout)
+	processedAt := now
+	if data, err := os.ReadFile(path); err == nil {
+		var existing NoteFileJSON
+		if json.Unmarshal(data, &existing) == nil && existing.ProcessedAt != "" {
+			processedAt = existing.ProcessedAt
 		}
 	}
 	f := NoteFileJSON{
 		DeliveryNote: n,
 		Status:       status,
 		Error:        errMsg,
-		CreatedAt:    createdAt,
-		UpdatedAt:    time.Now().Format(timeLayout),
+		ProcessedAt:  processedAt,
+		UpdatedAt:    now,
 	}
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
