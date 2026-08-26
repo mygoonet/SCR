@@ -161,15 +161,82 @@ type apiTransportations struct {
 	TotalPages     int                 `json:"totalPages"`
 }
 
+// captureState — состояние fetch-перехвата, приватное для одной сессии.
 // pending хранит перехваченные (паузнутые в response-stage) запросы к
 // /transportations: RequestID -> URL запроса.
 // pausedAt хранит время паузы каждого перехваченного запроса — чтобы из
 // карты можно было выбрать самый свежий, а не случайный.
-var (
-	pendingMu sync.Mutex
-	pending   = map[fetch.RequestID]string{}
-	pausedAt  = map[fetch.RequestID]time.Time{}
-)
+type captureState struct {
+	mu       sync.Mutex
+	pending  map[fetch.RequestID]string
+	pausedAt map[fetch.RequestID]time.Time
+}
+
+func newCaptureState() *captureState {
+	return &captureState{
+		pending:  map[fetch.RequestID]string{},
+		pausedAt: map[fetch.RequestID]time.Time{},
+	}
+}
+
+func (cs *captureState) reset() {
+	cs.mu.Lock()
+	cs.pending = map[fetch.RequestID]string{}
+	cs.pausedAt = map[fetch.RequestID]time.Time{}
+	cs.mu.Unlock()
+}
+
+func (cs *captureState) add(id fetch.RequestID, url string) {
+	cs.mu.Lock()
+	cs.pending[id] = url
+	cs.pausedAt[id] = time.Now()
+	cs.mu.Unlock()
+}
+
+// newestListRequest ищет самый свежий паузнутый запрос /transportations.
+func (cs *captureState) newestListRequest() (fetch.RequestID, bool) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	var (
+		listID fetch.RequestID
+		newest time.Time
+		found  bool
+	)
+	for id, url := range cs.pending {
+		u, err := neturl.Parse(url)
+		if err != nil || !strings.HasSuffix(u.Path, "/transportations") {
+			continue
+		}
+		if !found || cs.pausedAt[id].After(newest) {
+			listID, newest, found = id, cs.pausedAt[id], true
+		}
+	}
+	return listID, found
+}
+
+// drainAll вынимает и очищает все id, которые нужно отпустить.
+func (cs *captureState) drainAll() []fetch.RequestID {
+	cs.mu.Lock()
+	ids := make([]fetch.RequestID, 0, len(cs.pending))
+	for id := range cs.pending {
+		ids = append(ids, id)
+	}
+	cs.pending = map[fetch.RequestID]string{}
+	cs.pausedAt = map[fetch.RequestID]time.Time{}
+	cs.mu.Unlock()
+	return ids
+}
+
+// snapshotURLs — для логов при таймауте.
+func (cs *captureState) snapshotURLs() []string {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	urls := make([]string, 0, len(cs.pending))
+	for _, u := range cs.pending {
+		urls = append(urls, u)
+	}
+	return urls
+}
 
 // lastFetchMu/lastFetchTime/lastNotes — состояние последнего успешного тикера для веб-интерфейса
 var (
@@ -185,11 +252,11 @@ var (
 // Запрос удерживается в паузе до обработки в основном потоке
 // (fetch.GetResponseBody + fetch.ContinueResponse) — это самый надёжный
 // способ получить тело ответа SPA вместе со свежими токенами.
-func startTransportationsCapture(ctx context.Context) {
-	pendingMu.Lock()
-	pending = map[fetch.RequestID]string{}
-	pausedAt = map[fetch.RequestID]time.Time{}
-	pendingMu.Unlock()
+// Возвращает captureState, привязанный к этой сессии/ctx: весь последующий
+// код (FetchNotesAPI/continuePaused) для этой сессии должен использовать
+// именно его, а не какое-либо общее состояние.
+func startTransportationsCapture(ctx context.Context) *captureState {
+	cs := newCaptureState()
 
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
 		return fetch.Enable().
@@ -230,11 +297,10 @@ func startTransportationsCapture(ctx context.Context) {
 		}
 		log.Printf("fetch-intercept: %s", url)
 
-		pendingMu.Lock()
-		pending[e.RequestID] = url
-		pausedAt[e.RequestID] = time.Now()
-		pendingMu.Unlock()
+		cs.add(e.RequestID, url)
 	})
+
+	return cs
 }
 
 // reloadNotesAPI перезагружает страницу, заставляя SPA сделать свежий
@@ -243,7 +309,7 @@ func startTransportationsCapture(ctx context.Context) {
 // -> pending только negotiate) - делаем быстрый возврат на список без waitForTableRows
 // (waitForTableRows под паузой fetch дедлочит 30с).
 // SetCacheDisabled уже был сделан в initSession (SCRP/scraper.go:143) навсегда - здесь не нужен.
-func reloadNotesAPI(ctx context.Context) error {
+func reloadNotesAPI(ctx context.Context, cs *captureState) error {
 	start := time.Now()
 	var loc string
 	if err := chromedp.Run(ctx, chromedp.Location(&loc)); err != nil {
@@ -254,7 +320,7 @@ func reloadNotesAPI(ctx context.Context) error {
 	if strings.Contains(loc, "/sign/") || strings.Contains(loc, "/waybill") {
 		log.Printf("reloadNotesAPI: на waybill %s -> быстрый возврат на список", loc)
 		// Продолжаем все паузы чтобы разблокировать SPA перед навигацией
-		continuePaused(ctx)
+		continuePaused(ctx, cs)
 		// Esc закрывает SidePage, если не помогло - прямой Navigate на /carrier
 		chromedp.Run(ctx, chromedp.KeyEvent("\x1b"))
 		chromedp.Run(ctx, chromedp.Sleep(800*time.Millisecond))
@@ -303,32 +369,32 @@ func reloadNotesAPI(ctx context.Context) error {
 // timeoutSec — сколько секунд ждём появления/тела ответа.
 // Общий таймаут = timeoutSec + 30с на каждую попытку (запас на reload+навигацию waybill+GetResponseBody),
 // ретрай на свежем контексте иначе вторая попытка ловит deadline exceeded как в 10:11:52 и 11:19:37.
-func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) {
+func FetchNotesAPI(ctx context.Context, cs *captureState, timeoutSec int) ([]DeliveryNote, error) {
 	withTimeout := func(parent context.Context) (context.Context, context.CancelFunc) {
 		return context.WithTimeout(parent, time.Duration(timeoutSec+30)*time.Second)
 	}
 
 	outerCtx, outerCancel := withTimeout(ctx)
-	notes, err := fetchNotesAPICtx(outerCtx, timeoutSec)
+	notes, err := fetchNotesAPICtx(outerCtx, cs, timeoutSec)
 	outerCancel()
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "Invalid InterceptionId") {
 			log.Printf("FetchNotesAPI: протухший перехват, повторяю (ретрай на свежем контексте)...")
-			continuePaused(ctx)
+			continuePaused(ctx, cs)
 			// пауза 2s: хром/SPA должны успокоиться после неудачной попытки
 			chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
 			retryCtx, retryCancel := withTimeout(ctx)
 			defer retryCancel()
-			notes, err = fetchNotesAPICtx(retryCtx, timeoutSec)
+			notes, err = fetchNotesAPICtx(retryCtx, cs, timeoutSec)
 		} else if strings.Contains(errStr, "не перехвачен запрос") || strings.Contains(errStr, "Reload") || strings.Contains(errStr, "Location") {
 			log.Printf("FetchNotesAPI: таймаут/Reload ошибка, повторяю (ретрай на свежем контексте)...")
-			continuePaused(ctx)
+			continuePaused(ctx, cs)
 			// увеличенная пауза 3s: хром мог зависнуть на SetCacheDisabled/Reload
 			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
 			retryCtx, retryCancel := withTimeout(ctx)
 			defer retryCancel()
-			notes, err = fetchNotesAPICtx(retryCtx, timeoutSec)
+			notes, err = fetchNotesAPICtx(retryCtx, cs, timeoutSec)
 		} else if ctx.Err() != nil {
 			log.Printf("FetchNotesAPI: общий таймаут (browser завис?): %v", err)
 		} else if outerCtx.Err() != nil {
@@ -338,16 +404,13 @@ func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) 
 	return notes, err
 }
 
-func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) {
+func fetchNotesAPICtx(ctx context.Context, cs *captureState, timeoutSec int) ([]DeliveryNote, error) {
 	// Сбрасываем перехваченные запросы перед перезагрузкой: навигация отменяет
 	// висевшие паузные запросы (их InterceptionId становится невалидным), и они
 	// не должны оставаться кандидатами на выборку.
-	pendingMu.Lock()
-	pending = map[fetch.RequestID]string{}
-	pausedAt = map[fetch.RequestID]time.Time{}
-	pendingMu.Unlock()
+	cs.reset()
 
-	if err := reloadNotesAPI(ctx); err != nil {
+	if err := reloadNotesAPI(ctx, cs); err != nil {
 		return nil, fmt.Errorf("reload: %w", err)
 	}
 
@@ -357,31 +420,18 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 	var listID fetch.RequestID
 	for listID == "" && time.Now().Before(deadline) {
 		if ctx.Err() != nil {
-			continuePaused(ctx)
+			continuePaused(ctx, cs)
 			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 		}
-		pendingMu.Lock()
-		var newest time.Time
-		for id, url := range pending {
-			if u, err := neturl.Parse(url); err == nil && strings.HasSuffix(u.Path, "/transportations") {
-				if listID == "" {
-					listID = id
-					newest = pausedAt[id]
-					continue
-				}
-				// Из карты берём самый свежий запрос: старые могли быть
-				// отменены навигацией (Invalid InterceptionId).
-				if pausedAt[id].After(newest) {
-					listID = id
-					newest = pausedAt[id]
-				}
-			}
+		// Из карты берём самый свежий запрос: старые могли быть
+		// отменены навигацией (Invalid InterceptionId).
+		if id, ok := cs.newestListRequest(); ok {
+			listID = id
 		}
-		pendingMu.Unlock()
 		if listID == "" {
 			if err := chromedp.Run(ctx, chromedp.Sleep(400*time.Millisecond)); err != nil {
 				if ctx.Err() != nil {
-					continuePaused(ctx)
+					continuePaused(ctx, cs)
 					return nil, fmt.Errorf("context cancelled during wait: %w", ctx.Err())
 				}
 				log.Printf("FetchNotesAPI: sleep error: %v", err)
@@ -392,12 +442,7 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 		}
 	}
 	if listID == "" {
-		pendingMu.Lock()
-		urls := make([]string, 0, len(pending))
-		for _, u := range pending {
-			urls = append(urls, u)
-		}
-		pendingMu.Unlock()
+		urls := cs.snapshotURLs()
 
 		var loc string
 		chromedp.Run(ctx, chromedp.Location(&loc))
@@ -405,7 +450,7 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 		log.Printf("FetchNotesAPI: таймаут %ds, pending=%d, urls=%v, location=%s",
 			timeoutSec, len(urls), urls, loc)
 
-		continuePaused(ctx)
+		continuePaused(ctx, cs)
 		return nil, fmt.Errorf("не перехвачен запрос /transportations за %ds (pending=%d, loc=%s)",
 			timeoutSec, len(urls), loc)
 	}
@@ -420,12 +465,12 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 		raw = b
 		return nil
 	})); err != nil {
-		continuePaused(ctx)
+		continuePaused(ctx, cs)
 		return nil, fmt.Errorf("get response body: %w", err)
 	}
 
 	// Отпускаем все паузнутые (и сам список, и прочие совпадения).
-	continuePaused(ctx)
+	continuePaused(ctx, cs)
 
 	var resp apiTransportations
 	if err := json.Unmarshal(raw, &resp); err != nil {
@@ -460,20 +505,13 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 // continuePaused отпускает все перехваченные запросы, чтобы страница не висела.
 // Если ctx уже мёртв (timeout/cancel) — CDP-команды на нём не пройдут и паузы
 // останутся висеть; в этом случае используем свежий фоновый контекст с 5s таймаутом.
-func continuePaused(ctx context.Context) {
+func continuePaused(ctx context.Context, cs *captureState) {
 	if ctx.Err() != nil {
 		bg, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		ctx = bg
 	}
-	pendingMu.Lock()
-	ids := make([]fetch.RequestID, 0, len(pending))
-	for id := range pending {
-		ids = append(ids, id)
-	}
-	pending = map[fetch.RequestID]string{}
-	pausedAt = map[fetch.RequestID]time.Time{}
-	pendingMu.Unlock()
+	ids := cs.drainAll()
 
 	for _, id := range ids {
 		chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
@@ -526,9 +564,9 @@ func TestAPI(browser *Browser, cfg Config) {
 		return
 	}
 
-	startTransportationsCapture(ctx)
+	cs := startTransportationsCapture(ctx)
 
-	notes, err := FetchNotesAPI(ctx, 20)
+	notes, err := FetchNotesAPI(ctx, cs, 20)
 	if err != nil {
 		log.Printf("TestAPI: fetch: %v", err)
 		return
@@ -547,7 +585,7 @@ func TestAPI(browser *Browser, cfg Config) {
 // DOM-чтение даёт 0 строк, из-за чего цикл верификации висит.
 // giveUp — накладные, которые не подписаны после 3 попыток: они скипаются
 // до конца сессии (пока не уйдут из списка), чтобы не крутить цикл вечно.
-func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel *TelegramClient, giveUp map[string]bool) error {
+func signAllAPI(ctx context.Context, cs *captureState, certUser string, notes []DeliveryNote, tel *TelegramClient, giveUp map[string]bool) error {
 	var firstErr error
 	for _, n := range notes {
 		if skipNumbers[n.Number] {
@@ -584,7 +622,7 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 				// не работают, т.к. fetch-перехват держит /transportations в паузе
 				// и таблица не рендерится. FetchNotesAPI перехватывает запрос,
 				// читает тело и отпускает его — после этого таблица рисуется.
-				if _, refreshErr := FetchNotesAPI(ctx, 20); refreshErr != nil {
+				if _, refreshErr := FetchNotesAPI(ctx, cs, 20); refreshErr != nil {
 					nl.Logf(">>> refresh после ошибки подписания: %v", refreshErr)
 				}
 				waitForTableRows(ctx)
@@ -600,7 +638,7 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 			// до 4 раз (по ~10с), прежде чем решить что накладная ещё в списке.
 			signed = true
 			for check := 0; check < 4; check++ {
-				refreshed, err := FetchNotesAPI(ctx, 20)
+				refreshed, err := FetchNotesAPI(ctx, cs, 20)
 				if err != nil {
 					nl.Logf(">>> Ошибка обновления списка (API): %v", err)
 					signed = false
@@ -655,10 +693,13 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 	var session *Session
 	var ctx context.Context
+	var cs *captureState
 	sessionStartedAt := time.Now()
 	restartCount := 0
 
-	// startSession создает новую сессию, инициализирует и включает fetch-перехват
+	// startSession создает новую сессию, инициализирует и включает fetch-перехват.
+	// captureState создаётся заново на каждую сессию: RequestID из старой
+	// (закрытой) сессии не должны попадать в pending новой.
 	startSession := func() error {
 		session = browser.NewSession()
 		ctx = session.Ctx()
@@ -666,7 +707,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 			session.Close()
 			return fmt.Errorf("init session: %w", err)
 		}
-		startTransportationsCapture(ctx)
+		cs = startTransportationsCapture(ctx)
 		sessionStartedAt = time.Now()
 		return nil
 	}
@@ -768,7 +809,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 			tickCount = 0
 
 		}
-		notes, err := FetchNotesAPI(ctx, 30)
+		notes, err := FetchNotesAPI(ctx, cs, 30)
 		if err != nil {
 			log.Printf("MonitorAPI: ошибка получения накладных: %v", err)
 
@@ -888,6 +929,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 		if autoSign && len(todo) > 0 {
 			if err := signAllAPI(
 				ctx,
+				cs,
 				cfg.CertUser,
 				todo,
 				tel,
