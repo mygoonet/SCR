@@ -93,14 +93,15 @@ func startTransportationsCapture(ctx context.Context) {
 			if strings.Contains(u.Path, "/negotiate") || !strings.HasSuffix(u.Path, "/transportations") {
 				// не держим в паузе - отпускаем немедленно (в фоне, не блокируем ListenTarget)
 				reqID := e.RequestID
-				go func() {
-					// фоном на коротком таймауте, ctx может быть уже в deadline
-					bg, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				go func(parent context.Context) {
+					bg, cancel := context.WithTimeout(parent, 5*time.Second)
 					defer cancel()
-					chromedp.Run(bg, chromedp.ActionFunc(func(c context.Context) error {
+					if err := chromedp.Run(bg, chromedp.ActionFunc(func(c context.Context) error {
 						return fetch.ContinueResponse(reqID).Do(c)
-					}))
-				}()
+					})); err != nil {
+						log.Printf("fetch-intercept: continue negotiate/etc failed: %v", err)
+					}
+				}(ctx)
 				return
 			}
 		}
