@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/fetch"
-	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
@@ -22,20 +21,144 @@ type apiDriver struct {
 	MiddleName string `json:"middleName"`
 }
 
+// apiPossibleAction — элемент possibleActions накладной.
+type apiPossibleAction struct {
+	Name        string `json:"name"`
+	IsAvailable bool   `json:"isAvailable"`
+}
+
+// apiPerson — подписант (sender/recipient) в метаданных.
+type apiPerson struct {
+	ActionDate         string `json:"actionDate"`
+	IsRejected         bool   `json:"isRejected"`
+	IsInvalidSignature bool   `json:"isInvalidSignature"`
+	Position           string `json:"position"`
+	FirstName          string `json:"firstName"`
+	LastName           string `json:"lastName"`
+	MiddleName         string `json:"middleName"`
+}
+
+// apiPlannedWeight — планируемый вес позиции груза.
+type apiPlannedWeight struct {
+	GrossWeight float64 `json:"grossWeight"`
+}
+
+// apiCargoItem — позиция груза в cargoInfo.
+type apiCargoItem struct {
+	Name                string            `json:"name"`
+	CodeTnved           string            `json:"codeTnved"`
+	Condition           string            `json:"condition"`
+	PackageMethod       string            `json:"packageMethod"`
+	ContainerType       string            `json:"containerType"`
+	CargoSpaceQuantity  int               `json:"cargoSpaceQuantity"`
+	Marks               []string          `json:"marks"`
+	DangerousItems      []json.RawMessage `json:"dangerousItems"`
+	TransportContainers []json.RawMessage `json:"transportContainers"`
+	PlannedWeight       apiPlannedWeight  `json:"plannedWeight"`
+}
+
+// apiCargoInfo — блок cargoInfo в метаданных.
+type apiCargoInfo struct {
+	Items []apiCargoItem `json:"items"`
+}
+
+// apiPowerOfAttorney — доверенность получателя (recipientTitleInfo).
+type apiPowerOfAttorney struct {
+	StatusVerification struct {
+		StatusType string `json:"statusType"`
+	} `json:"statusVerification"`
+}
+
+// apiRecipientTitleInfo — recipientTitleInfo в метаданных.
+type apiRecipientTitleInfo struct {
+	PowerOfAttorney apiPowerOfAttorney `json:"powerOfAttorney"`
+}
+
+// apiReceptionMetadata — метаданные приёмки/сдачи (receptionMetadata,
+// deliveryMetadata и элементы *RevisionsMetadata имеют одинаковую форму).
+type apiReceptionMetadata struct {
+	ID                       string                `json:"id"`
+	TitleVersion             string                `json:"titleVersion"`
+	ActualCargoCondition     string                `json:"actualCargoCondition"`
+	PlannedShippingDate      string                `json:"plannedShippingDate"`
+	ActionStartedAt          string                `json:"actionStartedAt"`
+	ActionFinishedAt         string                `json:"actionFinishedAt"`
+	ActionStartedAtUtcOffset string                `json:"actionStartedAtUtcOffset"`
+	NumberOfCargoSpaces      string                `json:"numberOfCargoSpaces"`
+	MassBrutto               string                `json:"massBrutto"`
+	MassBruttoUnits          string                `json:"massBruttoUnits"`
+	Sender                   apiPerson             `json:"sender"`
+	Recipient                apiPerson             `json:"recipient"`
+	TruckInfo                string                `json:"truckInfo"`
+	ControllerResolutions    []json.RawMessage     `json:"controllerResolutions"`
+	CargoInfo                apiCargoInfo          `json:"cargoInfo"`
+	SenderTitleInfo          json.RawMessage       `json:"senderTitleInfo"`
+	RecipientTitleInfo       apiRecipientTitleInfo `json:"recipientTitleInfo"`
+	HasConsigneeNotes        bool                  `json:"hasConsigneeNotes"`
+	DeliveryType             string                `json:"deliveryType"`
+}
+
+// apiAttachmentDocuments — вложения накладной.
+type apiAttachmentDocuments struct {
+	Attachments []json.RawMessage `json:"attachments"`
+}
+
 type apiTransportation struct {
-	ID            string    `json:"id"`
-	WaybillNumber string    `json:"waybillNumber"`
-	WaybillDate   string    `json:"waybillDate"`
-	ConsignorName string    `json:"consignorName"`
-	ConsigneeName string    `json:"consigneeName"`
-	CarrierName   string    `json:"carrierName"`
+	ID            string `json:"id"`
+	WaybillNumber string `json:"waybillNumber"`
+	WaybillDate   string `json:"waybillDate"`
+	OrderNumber   string `json:"orderNumber"`
+	OrderDate     string `json:"orderDate"`
+	CargoName     string `json:"cargoName"`
+
+	ConsignorName    string `json:"consignorName"`
+	ConsignorAddress string `json:"consignorAddress"`
+	ReceptionAddress string `json:"receptionAddress"`
+
+	ConsigneeName    string `json:"consigneeName"`
+	ConsigneeAddress string `json:"consigneeAddress"`
+	DeliveryAddress  string `json:"deliveryAddress"`
+
+	CarrierName    string `json:"carrierName"`
+	CarrierAddress string `json:"carrierAddress"`
+
 	CurrentDriver apiDriver `json:"currentDriver"`
 	TruckInfo     string    `json:"truckInfo"`
+
+	ReceptionMetadata          *apiReceptionMetadata  `json:"receptionMetadata"`
+	DeliveryMetadata           *apiReceptionMetadata  `json:"deliveryMetadata"`
+	ReceptionRevisionsMetadata []apiReceptionMetadata `json:"receptionRevisionsMetadata"`
+	DeliveryRevisionsMetadata  []apiReceptionMetadata `json:"deliveryRevisionsMetadata"`
+	RelayMetadata              []json.RawMessage      `json:"relayMetadata"`
+	ReaddressMetadata          []json.RawMessage      `json:"readdressMetadata"`
+
+	IsObservable         bool   `json:"isObservable"`
+	IsTestTransportation bool   `json:"isTestTransportation"`
+	Status               string `json:"status"`
+	StatusText           string `json:"statusText"`
+	CreatedAt            string `json:"createdAt"`
+	ModifiedAt           string `json:"modifiedAt"`
+
+	PossibleActions []apiPossibleAction `json:"possibleActions"`
+
+	IsDraftForOtherOrg          bool `json:"isDraftForOtherOrg"`
+	IsReceptionRevisionUnsigned bool `json:"isReceptionRevisionUnsigned"`
+	IsDeliveryRevisionUnsigned  bool `json:"isDeliveryRevisionUnsigned"`
+	IsDeliveredPartially        bool `json:"isDeliveredPartially"`
+	IsDeliveryRejected          bool `json:"isDeliveryRejected"`
+
+	AttachmentDocuments     apiAttachmentDocuments `json:"attachmentDocuments"`
+	ConsigneeAdditionalInfo []json.RawMessage      `json:"consigneeAdditionalInfo"`
+	ConsignorAdditionalInfo []json.RawMessage      `json:"consignorAdditionalInfo"`
+	FormatVersion           string                 `json:"formatVersion"`
 }
 
 type apiTransportations struct {
-	Items      []apiTransportation `json:"items"`
-	TotalCount int                 `json:"totalCount"`
+	Items          []apiTransportation `json:"items"`
+	HasMoreResults bool                `json:"hasMoreResults"`
+	TotalCount     int                 `json:"totalCount"`
+	CurrentPage    int                 `json:"currentPage"`
+	TotalPages     int                 `json:"totalPages"`
 }
 
 // pending хранит перехваченные (паузнутые в response-stage) запросы к
@@ -119,9 +242,15 @@ func startTransportationsCapture(ctx context.Context) {
 // Если текущая страница - waybill (/sign/waybill), Reload бесполезен (лог 10:11:42 location=.../waybill
 // -> pending только negotiate) - делаем быстрый возврат на список без waitForTableRows
 // (waitForTableRows под паузой fetch дедлочит 30с).
+// SetCacheDisabled уже был сделан в initSession (SCRP/scraper.go:143) навсегда - здесь не нужен.
 func reloadNotesAPI(ctx context.Context) error {
+	start := time.Now()
 	var loc string
-	chromedp.Run(ctx, chromedp.Location(&loc))
+	if err := chromedp.Run(ctx, chromedp.Location(&loc)); err != nil {
+		log.Printf("reloadNotesAPI: Location error: %v (ctx.Err=%v)", err, ctx.Err())
+		return fmt.Errorf("Location: %w", err)
+	}
+	log.Printf("reloadNotesAPI: start loc=%s ctx.Err=%v", loc, ctx.Err())
 	if strings.Contains(loc, "/sign/") || strings.Contains(loc, "/waybill") {
 		log.Printf("reloadNotesAPI: на waybill %s -> быстрый возврат на список", loc)
 		// Продолжаем все паузы чтобы разблокировать SPA перед навигацией
@@ -129,34 +258,44 @@ func reloadNotesAPI(ctx context.Context) error {
 		// Esc закрывает SidePage, если не помогло - прямой Navigate на /carrier
 		chromedp.Run(ctx, chromedp.KeyEvent("\x1b"))
 		chromedp.Run(ctx, chromedp.Sleep(800*time.Millisecond))
+		if ctx.Err() != nil {
+			log.Printf("reloadNotesAPI: ctx canceled after Esc, duration=%v", time.Since(start))
+			return ctx.Err()
+		}
 		chromedp.Run(ctx, chromedp.Location(&loc))
 		if strings.Contains(loc, "/sign") || strings.Contains(loc, "/waybill") {
 			// Вырезаем хвост до /carrier - https://logist.kontur.ru/<box>/carrier
 			if idx := strings.Index(loc, "/carrier"); idx != -1 {
 				listURL := loc[:idx+len("/carrier")]
 				log.Printf("reloadNotesAPI: прямой Navigate %s", listURL)
-				chromedp.Run(ctx, chromedp.Navigate(listURL))
+				if navErr := chromedp.Run(ctx, chromedp.Navigate(listURL)); navErr != nil {
+					log.Printf("reloadNotesAPI: Navigate error: %v (ctx.Err=%v)", navErr, ctx.Err())
+				}
 			} else {
-				chromedp.Run(ctx, chromedp.NavigateBack())
+				if navErr := chromedp.Run(ctx, chromedp.NavigateBack()); navErr != nil {
+					log.Printf("reloadNotesAPI: NavigateBack error: %v (ctx.Err=%v)", navErr, ctx.Err())
+				}
 			}
 		}
-		chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
-			return network.SetCacheDisabled(true).Do(c)
-		}))
-		chromedp.Run(ctx, chromedp.Sleep(4*time.Second))
+		// Увеличен пауза 4s->7s: SPA медленная, 4s недостаточно, хром остается в рендере
+		// и следующий SetCacheDisabled (если будет) виснет 60s.
+		chromedp.Run(ctx, chromedp.Sleep(7*time.Second))
+		log.Printf("reloadNotesAPI: waybill путь завершен, duration=%v", time.Since(start))
 		return nil
 	}
-	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		return network.SetCacheDisabled(true).Do(ctx)
-	})); err != nil {
-		return fmt.Errorf("SetCacheDisabled: %w", err)
+	// Обычный путь: Reload. SetCacheDisabled уже был в initSession (навсегда).
+	// Перед Reload проверяем ctx - если уже deadline, нет смысла делать Reload.
+	if ctx.Err() != nil {
+		log.Printf("reloadNotesAPI: ctx canceled before Reload, duration=%v", time.Since(start))
+		return ctx.Err()
 	}
 	if err := chromedp.Run(ctx, chromedp.Reload()); err != nil {
-		return fmt.Errorf("Reload: %w", err)
+		return fmt.Errorf("Reload: %w (ctx.Err=%v, duration=%v)", err, ctx.Err(), time.Since(start))
 	}
 	if err := chromedp.Run(ctx, chromedp.Sleep(5*time.Second)); err != nil {
 		return fmt.Errorf("Sleep after reload: %w", err)
 	}
+	log.Printf("reloadNotesAPI: обычный путь завершен, duration=%v", time.Since(start))
 	return nil
 }
 
@@ -177,14 +316,16 @@ func FetchNotesAPI(ctx context.Context, timeoutSec int) ([]DeliveryNote, error) 
 		if strings.Contains(errStr, "Invalid InterceptionId") {
 			log.Printf("FetchNotesAPI: протухший перехват, повторяю (ретрай на свежем контексте)...")
 			continuePaused(ctx)
+			// пауза 2s: хром/SPA должны успокоиться после неудачной попытки
+			chromedp.Run(ctx, chromedp.Sleep(2*time.Second))
 			retryCtx, retryCancel := withTimeout(ctx)
 			defer retryCancel()
 			notes, err = fetchNotesAPICtx(retryCtx, timeoutSec)
-		} else if strings.Contains(errStr, "не перехвачен запрос") {
-			log.Printf("FetchNotesAPI: таймаут перехвата, повторяю (ретрай на свежем контексте)...")
+		} else if strings.Contains(errStr, "не перехвачен запрос") || strings.Contains(errStr, "Reload") || strings.Contains(errStr, "Location") {
+			log.Printf("FetchNotesAPI: таймаут/Reload ошибка, повторяю (ретрай на свежем контексте)...")
 			continuePaused(ctx)
-			// маленькая пауза чтобы SPA отошла после Continue
-			chromedp.Run(ctx, chromedp.Sleep(500*time.Millisecond))
+			// увеличенная пауза 3s: хром мог зависнуть на SetCacheDisabled/Reload
+			chromedp.Run(ctx, chromedp.Sleep(3*time.Second))
 			retryCtx, retryCancel := withTimeout(ctx)
 			defer retryCancel()
 			notes, err = fetchNotesAPICtx(retryCtx, timeoutSec)
@@ -244,6 +385,9 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 					return nil, fmt.Errorf("context cancelled during wait: %w", ctx.Err())
 				}
 				log.Printf("FetchNotesAPI: sleep error: %v", err)
+				// Защита от быстрого спина при потере CDP-коннекта:
+				// chromedp.Sleep упал, но ctx жив — ждём обычным time.Sleep.
+				time.Sleep(400 * time.Millisecond)
 			}
 		}
 	}
@@ -296,14 +440,17 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 			continue
 		}
 		n := DeliveryNote{
-			Number:      it.WaybillNumber,
-			Date:        it.WaybillDate,
-			Consignor:   it.ConsignorName,
-			Consignee:   it.ConsigneeName,
-			Carrier:     it.CarrierName,
-			Driver:      driverFullName(it.CurrentDriver),
-			DriverPhone: it.CurrentDriver.Phone,
-			Truck:       it.TruckInfo,
+			Number:           it.WaybillNumber,
+			Date:             it.WaybillDate,
+			Consignor:        it.ConsignorName,
+			ConsignorAddress: it.ConsignorAddress,
+			Consignee:        it.ConsigneeName,
+			ConsigneeAddress: it.ConsigneeAddress,
+			Carrier:          it.CarrierName,
+			Driver:           driverFullName(it.CurrentDriver),
+			DriverPhone:      it.CurrentDriver.Phone,
+			Truck:            it.TruckInfo,
+			CreatedAt:        formatCreatedAt(it.CreatedAt),
 		}
 		notes = append(notes, n)
 	}
@@ -311,7 +458,14 @@ func fetchNotesAPICtx(ctx context.Context, timeoutSec int) ([]DeliveryNote, erro
 }
 
 // continuePaused отпускает все перехваченные запросы, чтобы страница не висела.
+// Если ctx уже мёртв (timeout/cancel) — CDP-команды на нём не пройдут и паузы
+// останутся висеть; в этом случае используем свежий фоновый контекст с 5s таймаутом.
 func continuePaused(ctx context.Context) {
+	if ctx.Err() != nil {
+		bg, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ctx = bg
+	}
 	pendingMu.Lock()
 	ids := make([]fetch.RequestID, 0, len(pending))
 	for id := range pending {
@@ -331,6 +485,19 @@ func continuePaused(ctx context.Context) {
 			return err
 		}))
 	}
+}
+
+// formatCreatedAt переводит createdAt из UTC (RFC3339) в локальное время
+// в формате "02.01 15:04". При ошибке парсинга возвращает исходную строку.
+func formatCreatedAt(s string) string {
+	if s == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return s
+	}
+	return t.Local().Format("02.01 15:04")
 }
 
 func driverFullName(d apiDriver) string {
@@ -369,7 +536,7 @@ func TestAPI(browser *Browser, cfg Config) {
 
 	log.Printf("TestAPI: накладных %d:", len(notes))
 	for _, n := range notes {
-		log.Printf("  %s  от %s  %s → %s  %s", n.Number, n.Date, n.Consignor, n.Consignee, n.Carrier)
+		log.Printf("  %s  от %s  создан %s  %s → %s  %s", n.Number, n.Date, n.CreatedAt, n.Consignor, n.Consignee, n.Carrier)
 	}
 }
 
@@ -417,7 +584,9 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 				// не работают, т.к. fetch-перехват держит /transportations в паузе
 				// и таблица не рендерится. FetchNotesAPI перехватывает запрос,
 				// читает тело и отпускает его — после этого таблица рисуется.
-				FetchNotesAPI(ctx, 20)
+				if _, refreshErr := FetchNotesAPI(ctx, 20); refreshErr != nil {
+					nl.Logf(">>> refresh после ошибки подписания: %v", refreshErr)
+				}
 				waitForTableRows(ctx)
 				continue
 			}
@@ -466,6 +635,10 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 			}
 			lastFetchMu.Lock()
 			signingFailures = append(signingFailures, fmt.Sprintf("%s — не подписана после 3 попыток", n.Number))
+			// Не даём слайсу расти бесконечно — держим последние 50.
+			if len(signingFailures) > 50 {
+				signingFailures = signingFailures[len(signingFailures)-50:]
+			}
 			lastFetchMu.Unlock()
 		} else {
 			nl.SetStatus("signed", "")
@@ -480,20 +653,70 @@ func signAllAPI(ctx context.Context, certUser string, notes []DeliveryNote, tel 
 }
 func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan MonitorCmd) {
 
-	session := browser.NewSession()
-	defer session.Close()
+	var session *Session
+	var ctx context.Context
+	sessionStartedAt := time.Now()
+	restartCount := 0
 
-	ctx := session.Ctx()
+	// startSession создает новую сессию, инициализирует и включает fetch-перехват
+	startSession := func() error {
+		session = browser.NewSession()
+		ctx = session.Ctx()
+		if err := initSession(ctx, cfg); err != nil {
+			session.Close()
+			return fmt.Errorf("init session: %w", err)
+		}
+		startTransportationsCapture(ctx)
+		sessionStartedAt = time.Now()
+		return nil
+	}
 
-	if err := initSession(ctx, cfg); err != nil {
+	// restartSession закрывает текущую сессию и создает новую (при зависании хрома/CDP)
+	restartSession := func(reason string) error {
+		log.Printf("MonitorAPI: перезапуск сессии (reason=%s, uptime=%v, restarts=%d)", reason, time.Since(sessionStartedAt), restartCount)
+		if tel != nil {
+			tel.Sendf("🔄 MonitorAPI: перезапуск сессии (reason=%s, uptime=%v, restarts=%d)", reason, time.Since(sessionStartedAt).Round(time.Minute), restartCount)
+		}
+		if session != nil {
+			session.Close()
+		}
+		if err := startSession(); err != nil {
+			return err
+		}
+		restartCount++
+		return nil
+	}
+
+	// healthCheck проверяет, что хром target отвечает на CDP команды (5s timeout)
+	// Если не отвечает → target завис, нужен restartSession
+	healthCheck := func() bool {
+		if ctx == nil {
+			return false
+		}
+		checkCtx, checkCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer checkCancel()
+		var loc string
+		err := chromedp.Run(checkCtx, chromedp.Location(&loc))
+		if err != nil {
+			log.Printf("MonitorAPI: health check failed: %v (ctx.Err=%v)", err, ctx.Err())
+			return false
+		}
+		return true
+	}
+
+	// Первая сессия
+	if err := startSession(); err != nil {
 		log.Printf("MonitorAPI: init session: %v", err)
 		if tel != nil {
 			tel.Sendf("❌ MonitorAPI: init session: %v", err)
 		}
 		return
 	}
-
-	startTransportationsCapture(ctx)
+	defer func() {
+		if session != nil {
+			session.Close()
+		}
+	}()
 
 	interval := 360 * time.Second
 	autoSign := true
@@ -502,6 +725,10 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 	fetchFails := 0
 	lastFetchAlert := time.Time{}
 	tickCount := 0 // каждых 3 обход очищаем giveUp
+
+	// Профилактический рестарт каждые 24 часа (деградация хрома/CDP со временем)
+	const prophylacticRestartInterval = 24 * time.Hour
+	lastProphylacticRestart := time.Now()
 
 	log.Println("MonitorAPI запущен. Тикер:", interval)
 
@@ -513,6 +740,27 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 	// Один полный обход сразу при старте.
 	checkAndSign := func() {
 		tickCount++
+
+		// Профилактический рестарт каждые 24 часа
+		if time.Since(lastProphylacticRestart) > prophylacticRestartInterval {
+			log.Printf("MonitorAPI: профилактический рестарт (24h)")
+			if err := restartSession("prophylactic 24h"); err != nil {
+				log.Printf("MonitorAPI: prophylactic restart failed: %v", err)
+				return
+			}
+			lastProphylacticRestart = time.Now()
+			// После рестарта пропускаем этот тик, следующий будет через interval
+			return
+		}
+
+		// Health-check перед каждым тиком: если хром завис → рестарт сессии
+		if !healthCheck() {
+			if err := restartSession("health check failed"); err != nil {
+				log.Printf("MonitorAPI: restart after health check failed: %v", err)
+				return
+			}
+			// После рестарта пробуем еще раз в этом тике
+		}
 
 		if tickCount%3 == 0 {
 			giveUp = map[string]bool{}
@@ -572,9 +820,10 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 		for _, n := range notes {
 			log.Printf(
-				"  %s  от %s  %s → %s  %s",
+				"  %s  от %s  создан %s  %s → %s  %s",
 				n.Number,
 				n.Date,
+				n.CreatedAt,
 				n.Consignor,
 				n.Consignee,
 				n.Carrier,
@@ -606,7 +855,7 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 		// Убираем накладные, которые ранее окончательно
 		// не удалось подписать.
-		filtered := todo[:0]
+		filtered := make([]DeliveryNote, 0, len(todo))
 
 		for _, n := range todo {
 			if !giveUp[n.Number] {
