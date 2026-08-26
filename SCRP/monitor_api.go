@@ -179,13 +179,6 @@ func newCaptureState() *captureState {
 	}
 }
 
-func (cs *captureState) reset() {
-	cs.mu.Lock()
-	cs.pending = map[fetch.RequestID]string{}
-	cs.pausedAt = map[fetch.RequestID]time.Time{}
-	cs.mu.Unlock()
-}
-
 func (cs *captureState) add(id fetch.RequestID, url string) {
 	cs.mu.Lock()
 	cs.pending[id] = url
@@ -314,7 +307,7 @@ func reloadNotesAPI(ctx context.Context, cs *captureState) error {
 	var loc string
 	if err := chromedp.Run(ctx, chromedp.Location(&loc)); err != nil {
 		log.Printf("reloadNotesAPI: Location error: %v (ctx.Err=%v)", err, ctx.Err())
-		return fmt.Errorf("Location: %w", err)
+		return fmt.Errorf("location: %w", err)
 	}
 	log.Printf("reloadNotesAPI: start loc=%s ctx.Err=%v", loc, ctx.Err())
 	if strings.Contains(loc, "/sign/") || strings.Contains(loc, "/waybill") {
@@ -356,10 +349,10 @@ func reloadNotesAPI(ctx context.Context, cs *captureState) error {
 		return ctx.Err()
 	}
 	if err := chromedp.Run(ctx, chromedp.Reload()); err != nil {
-		return fmt.Errorf("Reload: %w (ctx.Err=%v, duration=%v)", err, ctx.Err(), time.Since(start))
+		return fmt.Errorf("reload: %w (ctx.Err=%v, duration=%v)", err, ctx.Err(), time.Since(start))
 	}
 	if err := chromedp.Run(ctx, chromedp.Sleep(5*time.Second)); err != nil {
-		return fmt.Errorf("Sleep after reload: %w", err)
+		return fmt.Errorf("sleep after reload: %w", err)
 	}
 	log.Printf("reloadNotesAPI: обычный путь завершен, duration=%v", time.Since(start))
 	return nil
@@ -387,7 +380,7 @@ func FetchNotesAPI(ctx context.Context, cs *captureState, timeoutSec int) ([]Del
 			retryCtx, retryCancel := withTimeout(ctx)
 			defer retryCancel()
 			notes, err = fetchNotesAPICtx(retryCtx, cs, timeoutSec)
-		} else if strings.Contains(errStr, "не перехвачен запрос") || strings.Contains(errStr, "Reload") || strings.Contains(errStr, "Location") {
+		} else if strings.Contains(errStr, "не перехвачен запрос") || strings.Contains(errStr, "reload") {
 			log.Printf("FetchNotesAPI: таймаут/Reload ошибка, повторяю (ретрай на свежем контексте)...")
 			continuePaused(ctx, cs)
 			// увеличенная пауза 3s: хром мог зависнуть на SetCacheDisabled/Reload
@@ -405,10 +398,10 @@ func FetchNotesAPI(ctx context.Context, cs *captureState, timeoutSec int) ([]Del
 }
 
 func fetchNotesAPICtx(ctx context.Context, cs *captureState, timeoutSec int) ([]DeliveryNote, error) {
-	// Сбрасываем перехваченные запросы перед перезагрузкой: навигация отменяет
-	// висевшие паузные запросы (их InterceptionId становится невалидным), и они
-	// не должны оставаться кандидатами на выборку.
-	cs.reset()
+	// Отпускаем зависшие паузы и очищаем stale-кандидатов перед перезагрузкой:
+	// навигация отменяет висевшие паузные запросы (их InterceptionId становится
+	// невалидным), и они не должны оставаться кандидатами на выборку.
+	continuePaused(ctx, cs)
 
 	if err := reloadNotesAPI(ctx, cs); err != nil {
 		return nil, fmt.Errorf("reload: %w", err)
@@ -822,10 +815,9 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 			errStr := err.Error()
 
 			// Немедленный алерт на критические ошибки:
-			// reload не выполнился, context отменён, браузер завис.
+			// reload не выполнился, context отменён.
 			isCritical := strings.Contains(errStr, "reload:") ||
-				strings.Contains(errStr, "context cancelled") ||
-				strings.Contains(errStr, "общий таймаут")
+				strings.Contains(errStr, "context cancelled")
 
 			if tel != nil && isCritical {
 				tel.Sendf("🔴 MonitorAPI: критическая ошибка: %v", err)
