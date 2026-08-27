@@ -21,6 +21,8 @@ jobs:
             set -e
             cd ~/SCR
             git pull --ff-only
+            # Останавливаем контейнер до сборки, чтобы сборка не конкурировала за ресурсы.
+            docker compose stop scr
             docker compose build
             docker compose up -d
             docker image prune -f
