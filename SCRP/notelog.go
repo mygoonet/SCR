@@ -78,13 +78,16 @@ type NoteLogger struct {
 
 // NoteFileJSON — формат note.json на диске: данные накладной + статус.
 // CreatedAt (из DeliveryNote) — реальное время создания документа из API;
-// ProcessedAt — когда бот впервые начал её обрабатывать.
+// ProcessedAt — когда бот впервые начал её обрабатывать (legacy);
+// SignedAt — времена всех успешных подписаний ботом (накладная может
+// подписываться несколько раз, записи только добавляются).
 type NoteFileJSON struct {
 	DeliveryNote
-	Status      string `json:"status"`
-	Error       string `json:"error,omitempty"`
-	ProcessedAt string `json:"processedAt"`
-	UpdatedAt   string `json:"updatedAt"`
+	Status      string   `json:"status"`
+	Error       string   `json:"error,omitempty"`
+	ProcessedAt string   `json:"processedAt,omitempty"`
+	SignedAt    []string `json:"signedAt,omitempty"`
+	UpdatedAt   string   `json:"updatedAt"`
 }
 
 func NewNoteLogger(n DeliveryNote) *NoteLogger {
@@ -141,17 +144,26 @@ func (l *NoteLogger) writeNoteJSON(n DeliveryNote, status, errMsg string) {
 	path := filepath.Join(l.Dir, "note.json")
 	now := time.Now().Format(timeLayout)
 	processedAt := now
+	var signedAt []string
 	if data, err := os.ReadFile(path); err == nil {
 		var existing NoteFileJSON
-		if json.Unmarshal(data, &existing) == nil && existing.ProcessedAt != "" {
-			processedAt = existing.ProcessedAt
+		if json.Unmarshal(data, &existing) == nil {
+			if existing.ProcessedAt != "" {
+				processedAt = existing.ProcessedAt
+			}
+			signedAt = existing.SignedAt
 		}
+	}
+	// Каждое успешное подписание добавляем в массив, старые записи не затираем.
+	if status == "signed" && (len(signedAt) == 0 || signedAt[len(signedAt)-1] != now) {
+		signedAt = append(signedAt, now)
 	}
 	f := NoteFileJSON{
 		DeliveryNote: n,
 		Status:       status,
 		Error:        errMsg,
 		ProcessedAt:  processedAt,
+		SignedAt:     signedAt,
 		UpdatedAt:    now,
 	}
 	data, err := json.MarshalIndent(f, "", "  ")
