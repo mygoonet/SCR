@@ -241,10 +241,10 @@ func SignDeliveryNote(ctx context.Context, number, certUser string) error {
 	}
 
 	// 5. Модалка "Выбор доверенности" -> доверенность -> "Продолжить"
-	if err := waitForJS(ctx, `document.querySelector('[data-tid="representative-poa-list-item"]') !== null`, 30*time.Second); err != nil {
+	if err := waitForJS(ctx, `document.querySelector('[data-tid="scoped-poa-list-item"]') !== null`, 30*time.Second); err != nil {
 		return fmt.Errorf("poa modal: %w", err)
 	}
-	poaClickJS := "function reactClick(el){var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));}" + "(function(){var item=document.querySelector('[data-tid=\"representative-poa-list-item\"]');if(!item) return null;reactClick(item);return 'clicked';})()"
+	poaClickJS := "function reactClick(el){var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));}" + "(function(){var item=document.querySelector('[data-tid=\"scoped-poa-list-item\"]');if(!item) return null;reactClick(item);return 'clicked';})()"
 	var poaRes string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(poaClickJS, &poaRes)); err != nil {
 		return fmt.Errorf("click poa: %w", err)
