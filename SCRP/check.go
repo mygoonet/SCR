@@ -30,12 +30,18 @@ type CheckReport struct {
 // CheckSite — ручная проверка, что разметка сайта (data-tid) не поменялась
 // и путь подписания до модалки выбора сертификата жив. НИЧЕГО не подписывает:
 // после проверки модалки выбора сертификата всё закрывается ESC.
-func CheckSite(browser *Browser, cfg Config) *CheckReport {
+// Если forceFresh=true — перед проверкой сбрасывается сессия, чтобы
+// гарантированно пройти ПОЛНЫЙ путь логина (а не по сохранённой сессии).
+func CheckSite(browser *Browser, cfg Config, forceFresh bool) *CheckReport {
 	rep := &CheckReport{}
 
 	session := browser.NewSession()
 	defer session.Close()
 	ctx := session.Ctx()
+
+	if forceFresh {
+		log.Println("CheckSite: принудительный сброс сессии перед проверкой")
+	}
 
 	if err := initSession(ctx, cfg); err != nil {
 		rep.SignError = fmt.Sprintf("init session: %v", err)
