@@ -101,6 +101,9 @@ func Login(ctx context.Context, certUser string) error {
 		return fmt.Errorf("click %s: %w", certUser, err)
 	}
 
+	// Диагностика: структура карточки сертификата сразу после клика.
+	log.Printf("Login: certCardDump=%s", DumpCertCard(ctx, certUser))
+
 	// После выбора сертификата/пользователя Контур делает редирект через
 	// auth.kontur.ru / identity.kontur.ru обратно в logist.kontur.ru. Ждём
 	// завершения входа: URL должен уйти с auth/identity и вернуться на

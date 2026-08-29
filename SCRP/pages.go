@@ -178,3 +178,40 @@ func ReactClickContains(ctx context.Context, text string) error {
 	}
 	return nil
 }
+
+// DumpCertCard возвращает структуру карточки сертификата, чей текст
+// содержит certUser: тег, role, data-tid, class, наличие обработчиков
+// (onclick) и координаты. Нужно для диагностики, почему клик по имени
+// на странице входа не завершает вход.
+func DumpCertCard(ctx context.Context, certUser string) string {
+	var out string
+	js := fmt.Sprintf(`(function(t){
+		var all = document.querySelectorAll('*');
+		for(var i=0;i<all.length;i++){
+			if(all[i].textContent.replace(/\\u00a0/g,' ').includes(t)){
+				var el = all[i];
+				var chain = [];
+				var cur = el;
+				for(var k=0;k<4 && cur;k++){
+					chain.push(cur.tagName + (cur.getAttribute('role')?'[role='+cur.getAttribute('role')+']':'') + (cur.getAttribute('data-tid')?'[data-tid='+cur.getAttribute('data-tid')+']':'') + '[class='+(cur.className&&cur.className.toString?cur.className.toString().slice(0,40):'')+']');
+					cur = cur.parentElement;
+				}
+				var r = el.getBoundingClientRect();
+				return JSON.stringify({
+					text: el.textContent.replace(/\\s+/g,' ').trim().slice(0,80),
+					tag: el.tagName,
+					role: el.getAttribute('role'),
+					dataTid: el.getAttribute('data-tid'),
+					hasOnclick: typeof el.onclick === 'function',
+					rect: {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)},
+					matchChain: chain
+				});
+			}
+		}
+		return 'NOT_FOUND';
+	})(%q)`, certUser)
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &out)); err != nil {
+		return "DUMP_ERR: " + err.Error()
+	}
+	return out
+}
