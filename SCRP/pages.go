@@ -119,7 +119,10 @@ func reactWaitForText(ctx context.Context, text string, exact bool) error {
 // ReactClick — клик по элементу с ТОЧНЫМ текстом через полную
 // последовательность событий (pointerover→mouseover→pointerdown→mousedown→
 // pointerup→mouseup→click), как в reactClick из sign.go. Простой .click()
-// на React-элементах (div/span с addEventListener) не срабатывает.
+// на React-элементах (div/span с addEventListener) не срабатывает, а
+// подъём к "кликабельному" предку (A/BUTTON/role=button) не находит его,
+// т.к. обработчик навешан на div строки. Поэтому кликаем САМ элемент с
+// текстом — событие с bubbles:true всплывёт до React-обработчика строки.
 func ReactClick(ctx context.Context, text string) error {
 	if err := reactWaitForText(ctx, text, true); err != nil {
 		return fmt.Errorf("wait %q: %w", text, err)
@@ -130,10 +133,6 @@ func ReactClick(ctx context.Context, text string) error {
 			var elText = all[i].textContent.replace(/\\u00a0/g, ' ');
 			if(elText.trim() === t){
 				var el = all[i];
-				while(el && el.tagName !== 'A' && el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button'){
-					el = el.parentElement;
-				}
-				if(!el) return 'not clickable';
 				var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};
 				el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));
 				return 'clicked ' + el.tagName;
@@ -145,14 +144,15 @@ func ReactClick(ctx context.Context, text string) error {
 	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
 		return err
 	}
-	if result == "not found" || result == "not clickable" {
+	if result == "not found" {
 		return fmt.Errorf("element %q not found", text)
 	}
 	return nil
 }
 
 // ReactClickContains — клик по элементу, ЧЕЙ ТЕКСТ СОДЕРЖИТ нужную строку
-// (для имени пользователя в списке сертификатов). Та же reactClick-логика.
+// (для имени пользователя в списке сертификатов). Та же reactClick-логика:
+// кликаем сам элемент с текстом, событие всплывает до React-обработчика.
 func ReactClickContains(ctx context.Context, text string) error {
 	if err := reactWaitForText(ctx, text, false); err != nil {
 		return fmt.Errorf("wait %q: %w", text, err)
@@ -162,10 +162,6 @@ func ReactClickContains(ctx context.Context, text string) error {
 		for(var i=0;i<all.length;i++){
 			if(all[i].textContent.replace(/\\u00a0/g, ' ').includes(t)){
 				var el = all[i];
-				while(el && el.tagName !== 'A' && el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button'){
-					el = el.parentElement;
-				}
-				if(!el) return 'not clickable';
 				var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};
 				el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));
 				return 'clicked ' + el.tagName;
@@ -177,7 +173,7 @@ func ReactClickContains(ctx context.Context, text string) error {
 	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
 		return err
 	}
-	if result == "not found" || result == "not clickable" {
+	if result == "not found" {
 		return fmt.Errorf("element containing %q not found", text)
 	}
 	return nil
