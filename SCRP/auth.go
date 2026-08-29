@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -100,8 +101,26 @@ func Login(ctx context.Context, certUser string) error {
 		return fmt.Errorf("click %s: %w", certUser, err)
 	}
 
+	// После выбора сертификата/пользователя Контур делает редирект через
+	// auth.kontur.ru / identity.kontur.ru обратно в logist.kontur.ru. Ждём
+	// завершения входа: URL должен уйти с auth/identity и вернуться на
+	// logist.kontur.ru. Без этого NavigateToCarrier застаёт страницу на
+	// auth-редиректе и вечно ждёт кнопку "Перевозчик" (которой там нет).
+	var finalURL string
+	deadline = time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		var url string
+		chromedp.Run(ctx, chromedp.Location(&url))
+		finalURL = url
+		if strings.Contains(url, "logist.kontur.ru") && !strings.Contains(url, "auth.kontur.ru") && !strings.Contains(url, "identity.kontur.ru") {
+			break
+		}
+		chromedp.Run(ctx, chromedp.Sleep(1*time.Second))
+	}
+	log.Printf("Login: после входа url=%s", finalURL)
+
 	return chromedp.Run(ctx,
 		chromedp.WaitReady(`body`),
-		chromedp.Sleep(5*time.Second),
+		chromedp.Sleep(2*time.Second),
 	)
 }
