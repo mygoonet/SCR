@@ -79,7 +79,7 @@ func Login(ctx context.Context, certUser string) error {
 
 	takeScreenshot(ctx, "login_auth_page")
 
-	if err := ClickElement(ctx, "Сертификат"); err != nil {
+	if err := ReactClick(ctx, "Сертификат"); err != nil {
 		return fmt.Errorf("click Сертификат: %w", err)
 	}
 
@@ -96,7 +96,7 @@ func Login(ctx context.Context, certUser string) error {
 
 	takeScreenshot(ctx, "login_after_cert_click")
 
-	if err := ClickElementContains(ctx, certUser); err != nil {
+	if err := ReactClickContains(ctx, certUser); err != nil {
 		return fmt.Errorf("click %s: %w", certUser, err)
 	}
 

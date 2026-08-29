@@ -101,3 +101,84 @@ func WaitForPage(ctx context.Context) error {
 		chromedp.Sleep(3*time.Second),
 	)
 }
+
+// reactWaitForText ждёт (до 30с) появления элемента с нужным текстом.
+// exact=true — точное совпадение, false — вхождение.
+func reactWaitForText(ctx context.Context, text string, exact bool) error {
+	js := fmt.Sprintf(`(function(t,exact){
+		var all = document.querySelectorAll('*');
+		for(var i=0;i<all.length;i++){
+			var elText = all[i].textContent.replace(/\\u00a0/g, ' ');
+			if(exact ? elText.trim() === t : elText.includes(t)) return true;
+		}
+		return false;
+	})(%q,%v)`, text, exact)
+	return waitForJS(ctx, js, 30*time.Second)
+}
+
+// ReactClick — клик по элементу с ТОЧНЫМ текстом через полную
+// последовательность событий (pointerover→mouseover→pointerdown→mousedown→
+// pointerup→mouseup→click), как в reactClick из sign.go. Простой .click()
+// на React-элементах (div/span с addEventListener) не срабатывает.
+func ReactClick(ctx context.Context, text string) error {
+	if err := reactWaitForText(ctx, text, true); err != nil {
+		return fmt.Errorf("wait %q: %w", text, err)
+	}
+	js := fmt.Sprintf(`(function(t){
+		var all = document.querySelectorAll('*');
+		for(var i=0;i<all.length;i++){
+			var elText = all[i].textContent.replace(/\\u00a0/g, ' ');
+			if(elText.trim() === t){
+				var el = all[i];
+				while(el && el.tagName !== 'A' && el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button'){
+					el = el.parentElement;
+				}
+				if(!el) return 'not clickable';
+				var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};
+				el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));
+				return 'clicked ' + el.tagName;
+			}
+		}
+		return 'not found';
+	})(%q)`, text)
+	var result string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
+		return err
+	}
+	if result == "not found" || result == "not clickable" {
+		return fmt.Errorf("element %q not found", text)
+	}
+	return nil
+}
+
+// ReactClickContains — клик по элементу, ЧЕЙ ТЕКСТ СОДЕРЖИТ нужную строку
+// (для имени пользователя в списке сертификатов). Та же reactClick-логика.
+func ReactClickContains(ctx context.Context, text string) error {
+	if err := reactWaitForText(ctx, text, false); err != nil {
+		return fmt.Errorf("wait %q: %w", text, err)
+	}
+	js := fmt.Sprintf(`(function(t){
+		var all = document.querySelectorAll('*');
+		for(var i=0;i<all.length;i++){
+			if(all[i].textContent.replace(/\\u00a0/g, ' ').includes(t)){
+				var el = all[i];
+				while(el && el.tagName !== 'A' && el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button'){
+					el = el.parentElement;
+				}
+				if(!el) return 'not clickable';
+				var r=el.getBoundingClientRect();var x=r.x+r.width/2,y=r.y+r.height/2;var opts={bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0};
+				el.dispatchEvent(new PointerEvent('pointerover',opts));el.dispatchEvent(new MouseEvent('mouseover',opts));el.dispatchEvent(new PointerEvent('pointerdown',opts));el.dispatchEvent(new MouseEvent('mousedown',opts));el.dispatchEvent(new PointerEvent('pointerup',opts));el.dispatchEvent(new MouseEvent('mouseup',opts));el.dispatchEvent(new MouseEvent('click',opts));
+				return 'clicked ' + el.tagName;
+			}
+		}
+		return 'not found';
+	})(%q)`, text)
+	var result string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
+		return err
+	}
+	if result == "not found" || result == "not clickable" {
+		return fmt.Errorf("element containing %q not found", text)
+	}
+	return nil
+}
