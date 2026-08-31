@@ -202,8 +202,11 @@ const tickerProgress = computed(() => {
                 <div class="route__meta route__meta--addr">
                   {{ n.consignorAddress || '—' }} → {{ n.consigneeAddress || '—' }}
                 </div>
+                <div v-if="n.receptionAddress" class="route__meta route__meta--delivery">
+                  <span class="k">Приём:</span> <strong>{{ n.receptionAddress }}</strong>
+                </div>
                 <div v-if="n.deliveryAddress" class="route__meta route__meta--delivery">
-                  <span class="k">Доставка:</span> {{ n.deliveryAddress }}
+                  <span class="k">Доставка:</span> <strong>{{ n.deliveryAddress }}</strong>
                 </div>
               </div>
             </td>

@@ -485,15 +485,13 @@ func fetchNotesAPICtx(ctx context.Context, cs *captureState, timeoutSec int) ([]
 			ConsignorAddress: it.ConsignorAddress,
 			Consignee:        it.ConsigneeName,
 			ConsigneeAddress: it.ConsigneeAddress,
+			ReceptionAddress: it.ReceptionAddress,
 			DeliveryAddress:  it.DeliveryAddress,
 			Carrier:          it.CarrierName,
 			Driver:           driverFullName(it.CurrentDriver),
 			DriverPhone:      it.CurrentDriver.Phone,
 			Truck:            it.TruckInfo,
 			CreatedAt:        formatCreatedAt(it.CreatedAt),
-		}
-		if n.DeliveryAddress == "" {
-			n.DeliveryAddress = it.ReceptionAddress
 		}
 		notes = append(notes, n)
 	}
