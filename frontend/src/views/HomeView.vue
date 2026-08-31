@@ -189,15 +189,14 @@ function formatSec(sec) {
 
     <!-- content centered -->
     <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="px-4 sm:px-6 lg:px-8 pb-10">
-
-    <!-- status bar: две колонки — слева Тикер, справа 1м 20с (Сейчас убран для компактности) -->
-    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+    <!-- status bar - по центру как хедер, full width внутри контейнера -->
+    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch w-full bg-gray-50 border border-gray-200 rounded-lg overflow-hidden min-w-0">
       <div class="absolute inset-0 bg-gray-200 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
-      <div class="relative flex items-baseline gap-2 px-3 py-2 min-w-0">
+      <div class="relative flex items-baseline gap-1.5 sm:gap-2 px-3 py-2 min-w-0">
         <span class="text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap shrink-0 leading-none">last tic</span>
-        <span class="font-bold text-sm sm:text-[15px] text-black whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
+        <span class="font-bold text-[13px] sm:text-[15px] text-black whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
       </div>
-      <div v-if="secondsSinceFetch != null" class="relative flex items-center justify-center px-3 sm:px-5 min-w-[78px] sm:min-w-[110px]">
+      <div v-if="secondsSinceFetch != null" class="relative flex items-center justify-center px-3 sm:px-5 min-w-[66px] sm:min-w-[90px] shrink-0">
         <span class="font-bold text-sm sm:text-base text-black whitespace-nowrap tabular-nums leading-none">{{ formatSec(secondsSinceFetch) }}</span>
       </div>
       <div v-if="status.lastFetchError" class="relative col-span-2 border-t border-red-200 bg-red-50 px-3 py-1.5 flex gap-2 items-baseline flex-wrap">
@@ -231,62 +230,68 @@ function formatSec(sec) {
       <div class="mt-1 text-sm text-gray-500">Накладные появятся после следующего тикера</div>
     </div>
 
-    <!-- table -->
-    <div v-else class="mt-4 border border-gray-200 rounded-xl overflow-x-auto -webkit-overflow-scrolling-touch bg-white">
-      <table class="w-full border-collapse text-sm">
+    <!-- table: адаптив без скрытия полей -->
+    <div v-else class="mt-4 border border-gray-200 rounded-xl overflow-hidden sm:overflow-x-auto bg-white">
+      <table class="w-full table-fixed sm:table-auto border-collapse text-sm">
+        <colgroup>
+          <col class="w-[28%] sm:w-auto" />
+          <col class="w-[40%] sm:w-auto" />
+          <col class="w-[20%] sm:w-[110px]" />
+          <col class="w-[12%] sm:w-[64px]" />
+        </colgroup>
         <thead>
           <tr>
-            <th class="text-left text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Номер / Дата</th>
-            <th class="text-left text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Маршрут</th>
-            <th class="text-center text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Статус</th>
-            <th class="text-center text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Pic</th>
+            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Номер / Дата</th>
+            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Маршрут</th>
+            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Статус</th>
+            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight">Pic</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="n in filtered" :key="n.number" class="border-b border-gray-100 last:border-none hover:bg-gray-50">
             <!-- номер / дата -->
-            <td class="px-3 py-2.5 align-top">
-              <div class="flex flex-col gap-0.5">
-                <span class="font-mono font-semibold text-sm">{{ n.number }}</span>
-                <span class="text-xs text-gray-400">{{ n.date || '—' }}</span>
-                <span class="text-[11px] text-gray-400 flex gap-1 items-baseline"><span class="uppercase tracking-wide text-gray-400 font-medium">созд.</span> {{ splitDT(n.createdAt).t || '—' }}</span>
-                <span class="text-[11px] text-gray-400 flex gap-1 items-baseline"><span class="uppercase tracking-wide text-gray-400 font-medium">подп.</span> {{ splitDT(signedAt(n)).t || '—' }}</span>
+            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-top">
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="font-mono font-semibold text-[13px] sm:text-sm leading-none truncate">{{ n.number }}</span>
+                <span class="text-[11px] sm:text-xs text-gray-400 leading-none">{{ n.date || '—' }}</span>
+                <span class="text-[10px] sm:text-[11px] text-gray-400 flex gap-1 items-baseline leading-none"><span class="uppercase tracking-wide font-medium shrink-0">созд.</span> <span class="truncate">{{ splitDT(n.createdAt).t || '—' }}</span></span>
+                <span class="text-[10px] sm:text-[11px] text-gray-400 flex gap-1 items-baseline leading-none"><span class="uppercase tracking-wide font-medium shrink-0">подп.</span> <span class="truncate">{{ splitDT(signedAt(n)).t || '—' }}</span></span>
               </div>
             </td>
             <!-- маршрут -->
-            <td class="px-3 py-2.5 align-top">
-              <div class="flex flex-col gap-0.5 leading-snug">
-                <div class="text-sm text-black break-all"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Отпр.</span> {{ n.consignor || '—' }}</div>
-                <div class="text-sm text-black break-all"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Получ.</span> {{ n.consignee || '—' }}</div>
-                <div v-if="n.driver || n.truck" class="mt-1 text-xs text-gray-400">
+            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-top">
+              <div class="flex flex-col gap-0.5 leading-snug min-w-0">
+                <div class="text-xs sm:text-sm text-black break-words [overflow-wrap:anywhere] leading-tight"><span class="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-400 font-medium">Отпр.</span> {{ n.consignor || '—' }}</div>
+                <div class="text-xs sm:text-sm text-black break-words [overflow-wrap:anywhere] leading-tight"><span class="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-400 font-medium">Получ.</span> {{ n.consignee || '—' }}</div>
+                <div v-if="n.driver || n.truck" class="text-[11px] sm:text-xs text-gray-400 leading-tight truncate">
                   <span v-if="n.driver">{{ n.driver }}</span>
                   <span v-if="n.driver && n.truck"> · </span>
                   <span v-if="n.truck" class="font-mono">{{ n.truck }}</span>
                 </div>
-                <div class="text-xs text-gray-400 mt-0.5">{{ n.consignorAddress || '—' }} → {{ n.consigneeAddress || '—' }}</div>
-                <div v-if="n.receptionAddress" class="text-xs text-gray-400 mt-0.5"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Приём:</span> <strong>{{ n.receptionAddress }}</strong></div>
-                <div v-if="n.deliveryAddress" class="text-xs text-gray-400 mt-0.5"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Доставка:</span> <strong>{{ n.deliveryAddress }}</strong></div>
+                <div class="text-[11px] sm:text-xs text-gray-400 leading-tight break-words [overflow-wrap:anywhere] line-clamp-2">{{ n.consignorAddress || '—' }} → {{ n.consigneeAddress || '—' }}</div>
+                <div v-if="n.receptionAddress" class="text-[11px] sm:text-xs text-gray-400 leading-tight break-words [overflow-wrap:anywhere]"><span class="text-[10px] sm:text-[11px] uppercase tracking-wide font-medium">Приём:</span> <strong class="font-semibold text-gray-600 break-words">{{ n.receptionAddress }}</strong></div>
+                <div v-if="n.deliveryAddress" class="text-[11px] sm:text-xs text-gray-400 leading-tight break-words [overflow-wrap:anywhere]"><span class="text-[10px] sm:text-[11px] uppercase tracking-wide font-medium">Доставка:</span> <strong class="font-semibold text-gray-600 break-words">{{ n.deliveryAddress }}</strong></div>
               </div>
             </td>
             <!-- статус -->
-            <td class="px-3 py-2.5 align-middle text-center">
+            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-middle text-center">
               <template v-if="n.status">
-                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-5 px-2 rounded-full text-[11px] font-semibold bg-black text-white border border-black whitespace-nowrap">Sign</span>
-                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-5 px-2 rounded-full text-[11px] font-semibold bg-white text-red-700 border border-red-200 whitespace-nowrap">ошибка</span>
-                <span v-else class="inline-flex items-center justify-center h-5 px-2 rounded-full text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-200 whitespace-nowrap">{{ n.status }}</span>
+                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-black text-white border border-black whitespace-nowrap leading-none">Sign</span>
+                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-white text-red-700 border border-red-200 whitespace-nowrap leading-none">ошибка</span>
+                <span v-else class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-200 whitespace-nowrap leading-none">{{ n.status }}</span>
               </template>
-              <span v-if="n.error" class="block text-xs text-red-700 leading-snug break-all">{{ n.error }}</span>
-              <span v-if="!n.status && !n.error" class="text-gray-400">—</span>
+              <span v-if="n.error" class="block text-[11px] sm:text-xs text-red-700 leading-tight break-words [overflow-wrap:anywhere] mt-1 line-clamp-3">{{ n.error }}</span>
+              <span v-if="!n.status && !n.error" class="text-gray-400 text-xs">—</span>
             </td>
             <!-- скриншоты -->
-            <td class="px-3 pt-[30px] pb-2.5 align-middle text-center">
+            <td class="px-1 sm:px-3 py-2 sm:py-2.5 align-middle text-center">
               <template v-if="n.shots?.length">
-                <button class="block w-9 h-6 border border-gray-200 rounded overflow-hidden bg-gray-50 cursor-pointer p-0" @click="openCarousel(n,0)" :title="n.shots[0]">
+                <button class="mx-auto block w-7 h-5 sm:w-9 sm:h-6 border border-gray-200 rounded overflow-hidden bg-gray-50 cursor-pointer p-0" @click="openCarousel(n,0)" :title="n.shots[0]">
                   <img :src="`/screenshots/${n.number}/${n.shots[0]}`" loading="lazy" class="w-full h-full object-cover" />
                 </button>
-                <span v-if="n.shots.length > 1" class="text-xs text-gray-400 ml-1">+{{ n.shots.length - 1 }}</span>
+                <span v-if="n.shots.length > 1" class="block text-[10px] sm:text-xs text-gray-400 leading-none mt-0.5">+{{ n.shots.length - 1 }}</span>
               </template>
-              <span v-else class="text-gray-400">—</span>
+              <span v-else class="text-gray-400 text-xs">—</span>
             </td>
           </tr>
         </tbody>
