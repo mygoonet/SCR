@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /scr /usr/local/bin/scr
+COPY --from=builder /src/frontend/dist /frontend/dist
 
 RUN mkdir -p /home/app/.config/chromium-gost-scrp
 
