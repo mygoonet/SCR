@@ -191,23 +191,20 @@ function formatSec(sec) {
     <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="px-4 sm:px-6 lg:px-8 pb-10">
 
     <!-- status bar -->
-    <div v-if="status" class="mt-4 relative flex items-center px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+    <div v-if="status" class="mt-4 relative flex flex-wrap items-center justify-between gap-x-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
       <div class="absolute inset-0 bg-gray-200 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
-      <div class="relative flex flex-col gap-y-1 text-sm flex-1 min-w-0">
+      <div class="relative flex flex-col gap-y-0.5 text-sm">
         <div class="flex gap-2 items-baseline">
           <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Тикер</span>
-          <template v-if="status.lastFetchTime">
-            <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(status.lastFetchTime).t }}</span>
-          </template>
-          <span v-else class="text-gray-400">—</span>
+          <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
         </div>
         <div class="flex gap-2 items-baseline">
           <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Сейчас</span>
           <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(liveNow).t }}</span>
         </div>
       </div>
-      <div v-if="secondsSinceFetch != null" class="relative flex items-center pl-4 text-sm self-center">
-        <span class="font-bold text-black">{{ formatSec(secondsSinceFetch) }}</span>
+      <div v-if="secondsSinceFetch != null" class="relative font-bold text-sm text-black">
+        {{ formatSec(secondsSinceFetch) }}
       </div>
       <div v-if="status.lastFetchError" class="relative">
         <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium" style="color:#991b1b">Ошибка</span>
