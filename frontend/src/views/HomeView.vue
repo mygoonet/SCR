@@ -88,6 +88,12 @@ function splitDT(s) {
   const [d, t] = s.split(' ')
   return { d: d || s, t: t || '' }
 }
+const tickerProgress = computed(() => {
+  const m = status.value?.minutesSinceFetch
+  if (m == null || m < 0) return 0
+  const intervalMin = 6
+  return Math.min(100, Math.max(0, (m / intervalMin) * 100))
+})
 </script>
 
 <template>
@@ -114,6 +120,7 @@ function splitDT(s) {
 
     <!-- status bar -->
     <div class="statusbar" v-if="status">
+      <div class="statusbar__fill" :style="{ width: tickerProgress + '%' }"></div>
       <div class="statusbar__item">
         <span class="k">Тикер</span>
         <span class="dt" v-if="status.lastFetchTime">
@@ -372,6 +379,19 @@ function splitDT(s) {
   background: #fafafa;
   border: 1px solid var(--border);
   border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.statusbar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #e5e7eb;
+  transition: width 1s linear;
+  pointer-events: none;
+}
+.statusbar__item {
+  position: relative;
+  z-index: 1;
 }
 .statusbar__item {
   display: flex;
