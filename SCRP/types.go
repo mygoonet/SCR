@@ -9,6 +9,7 @@ type DeliveryNote struct {
 	ConsignorAddress string `json:"consignorAddress"`
 	Consignee        string `json:"consignee"`
 	ConsigneeAddress string `json:"consigneeAddress"`
+	DeliveryAddress  string `json:"deliveryAddress,omitempty"` // адрес места доставки груза
 	Carrier          string `json:"carrier"`
 	Driver           string `json:"driver"`
 	DriverPhone      string `json:"driverPhone"`

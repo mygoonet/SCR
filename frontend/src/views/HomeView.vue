@@ -45,6 +45,7 @@ const filtered = computed(() => {
     n.number.toLowerCase().includes(q) ||
     (n.consignor && n.consignor.toLowerCase().includes(q)) ||
     (n.consignee && n.consignee.toLowerCase().includes(q)) ||
+    (n.deliveryAddress && n.deliveryAddress.toLowerCase().includes(q)) ||
     (n.driver && n.driver.toLowerCase().includes(q)) ||
     (n.truck && n.truck.toLowerCase().includes(q)) ||
     (n.status && n.status.toLowerCase().includes(q))
@@ -200,6 +201,9 @@ const tickerProgress = computed(() => {
                 </div>
                 <div class="route__meta route__meta--addr">
                   {{ n.consignorAddress || '—' }} → {{ n.consigneeAddress || '—' }}
+                </div>
+                <div v-if="n.deliveryAddress" class="route__meta route__meta--delivery">
+                  <span class="k">Доставка:</span> {{ n.deliveryAddress }}
                 </div>
               </div>
             </td>
