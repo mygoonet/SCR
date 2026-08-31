@@ -190,25 +190,19 @@ function formatSec(sec) {
     <!-- content centered -->
     <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="px-4 sm:px-6 lg:px-8 pb-10">
 
-    <!-- status bar -->
-    <div v-if="status" class="mt-4 relative flex flex-wrap items-center justify-between gap-x-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+    <!-- status bar: две колонки — слева Тикер, справа 1м 20с (Сейчас убран для компактности) -->
+    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
       <div class="absolute inset-0 bg-gray-200 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
-      <div class="relative flex flex-col gap-y-0.5 text-sm">
-        <div class="flex gap-2 items-baseline">
-          <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Тикер</span>
-          <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
-        </div>
-        <div class="flex gap-2 items-baseline">
-          <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Сейчас</span>
-          <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(liveNow).t }}</span>
-        </div>
+      <div class="relative flex items-baseline gap-2 px-3 py-2 min-w-0">
+        <span class="text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap shrink-0 leading-none">last tic</span>
+        <span class="font-bold text-sm sm:text-[15px] text-black whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
       </div>
-      <div v-if="secondsSinceFetch != null" class="relative font-bold text-sm text-black">
-        {{ formatSec(secondsSinceFetch) }}
+      <div v-if="secondsSinceFetch != null" class="relative flex items-center justify-center px-3 sm:px-5 min-w-[78px] sm:min-w-[110px]">
+        <span class="font-bold text-sm sm:text-base text-black whitespace-nowrap tabular-nums leading-none">{{ formatSec(secondsSinceFetch) }}</span>
       </div>
-      <div v-if="status.lastFetchError" class="relative">
-        <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium" style="color:#991b1b">Ошибка</span>
-        <span class="text-sm" style="color:#991b1b">{{ status.lastFetchError }}</span>
+      <div v-if="status.lastFetchError" class="relative col-span-2 border-t border-red-200 bg-red-50 px-3 py-1.5 flex gap-2 items-baseline flex-wrap">
+        <span class="text-[10px] uppercase tracking-widest font-medium shrink-0" style="color:#991b1b">Ошибка</span>
+        <span class="text-xs sm:text-sm break-all" style="color:#991b1b">{{ status.lastFetchError }}</span>
       </div>
     </div>
 
