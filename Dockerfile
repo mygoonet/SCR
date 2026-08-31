@@ -1,9 +1,17 @@
+FROM node:22-bookworm-slim AS frontend-builder
+WORKDIR /src/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+COPY frontend/ ./
+RUN npm run build
+
 FROM golang:1.26-bookworm AS builder
 
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+COPY --from=frontend-builder /src/frontend/dist ./frontend/dist
 RUN CGO_ENABLED=0 go build -o /scr .
 
 FROM debian:bookworm-slim
