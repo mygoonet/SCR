@@ -7,8 +7,13 @@ const loading = ref(true)
 const error = ref('')
 const query = ref('')
 const isUpdating = ref(false)
+const countdown = ref(5)
+const countdownPulse = ref(false)
+const now = ref(Date.now())
 let timer = null
 let flashTimer = null
+let countdownTimer = null
+let clockTimer = null
 
 async function fetchData() {
   isUpdating.value = true
@@ -16,6 +21,17 @@ async function fetchData() {
     const [r1, r2] = await Promise.all([fetch('/api/notes'), fetch('/api/status')])
     if (!r1.ok) throw new Error('notes ' + r1.status)
     notes.value = await r1.json()
+    // TODO: убрать после тестов — искусственная ошибка для проверки UI
+    notes.value.push({
+      number: 'ТСТ-000001',
+      date: '31.08.2026',
+      consignor: 'Тестовый отправитель',
+      consignee: 'Тестовый получатель',
+      carrier: 'Тестовый перевозчик',
+      status: 'failed',
+      error: 'Ошибка подписания: сертификат не найден',
+      createdAt: '2026-08-31 10:00:00',
+    })
     status.value = await r2.json()
     error.value = ''
   } catch (e) {
@@ -30,8 +46,22 @@ async function fetchData() {
 onMounted(() => {
   fetchData()
   timer = setInterval(fetchData, 5000)
+  countdown.value = 5
+  countdownTimer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      countdown.value = 5
+      countdownPulse.value = true
+      setTimeout(() => (countdownPulse.value = false), 600)
+    }
+  }, 1000)
+  clockTimer = setInterval(() => { now.value = Date.now() }, 1000)
 })
-onUnmounted(() => timer && clearInterval(timer))
+onUnmounted(() => {
+  timer && clearInterval(timer)
+  countdownTimer && clearInterval(countdownTimer)
+  clockTimer && clearInterval(clockTimer)
+})
 
 function signedAt(n) {
   if (n.signedAt?.length) return n.signedAt.join(', ')
@@ -51,12 +81,6 @@ const filtered = computed(() => {
     (n.status && n.status.toLowerCase().includes(q))
   )
 })
-
-function statusClass(s) {
-  if (s === 'signed') return 'badge badge--ok'
-  if (s === 'failed') return 'badge badge--err'
-  return 'badge badge--wait'
-}
 
 // carousel
 const showCarousel = ref(false)
@@ -90,135 +114,188 @@ function splitDT(s) {
   return { d: d || s, t: t || '' }
 }
 const tickerProgress = computed(() => {
-  const m = status.value?.minutesSinceFetch
-  if (m == null || m < 0) return 0
-  const intervalMin = 6
-  return Math.min(100, Math.max(0, (m / intervalMin) * 100))
+  now.value
+  const t = status.value?.lastFetchTime
+  if (!t) return 0
+  const [d, timePart] = t.split(' ')
+  if (!timePart) return 0
+  const [h, m, s] = timePart.split(':').map(Number)
+  const fetchDate = new Date()
+  const [dd, mm, yyyy] = (d || '').split('.')
+  if (yyyy) fetchDate.setFullYear(+yyyy, +mm - 1, +dd)
+  fetchDate.setHours(h || 0, m || 0, s || 0, 0)
+  const secSince = Math.max(0, Math.floor((Date.now() - fetchDate.getTime()) / 1000))
+  const intervalSec = 6 * 60
+  return Math.min(100, Math.max(0, (secSince / intervalSec) * 100))
 })
+
+const secondsSinceFetch = computed(() => {
+  now.value
+  const t = status.value?.lastFetchTime
+  if (!t) return null
+  const [d, timePart] = t.split(' ')
+  if (!timePart) return null
+  const [h, m, s] = timePart.split(':').map(Number)
+  const fetchDate = new Date()
+  const [dd, mm, yyyy] = (d || '').split('.')
+  if (yyyy) fetchDate.setFullYear(+yyyy, +mm - 1, +dd)
+  fetchDate.setHours(h || 0, m || 0, s || 0, 0)
+  return Math.max(0, Math.floor((Date.now() - fetchDate.getTime()) / 1000))
+})
+
+const liveNow = computed(() => {
+  const d = new Date(now.value)
+  const pad = n => String(n).padStart(2, '0')
+  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+})
+
+function syncNow() {
+  fetchData()
+  countdown.value = 5
+}
+
+function formatSec(sec) {
+  if (sec == null) return '—'
+  const mm = Math.floor(sec / 60)
+  const ss = sec % 60
+  if (mm === 0) return ss + 'с'
+  return mm + 'м ' + ss + 'с'
+}
 </script>
 
 <template>
-  <div class="page">
-    <!-- header -->
-    <header class="header">
-      <div class="header__inner">
-        <div>
-          <h1 class="title">Накладные</h1>
-          <p class="subtitle">Контур Логистика · автоматическое подписание</p>
+  <div>
+    <!-- header full-width -->
+    <header class="border-b border-gray-200 pt-7 pb-5 bg-white sticky top-0 z-10">
+      <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="grid grid-cols-3 items-center gap-x-8 px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col gap-0.5">
+          <h1 class="text-lg sm:text-xl font-semibold tracking-tight text-black leading-tight">Накладные</h1>
+          <p class="text-xs text-gray-400 leading-snug">Контур Логистика · автоматическое подписание</p>
         </div>
-        <div class="header__right">
-          <div class="count">
-            <span class="count__num">{{ notes.length }}</span>
-            <span class="count__label">всего</span>
+        <div class="self-center text-center">
+          <div class="inline-block border border-gray-200 rounded-lg px-3 py-2 bg-white">
+            <span class="block text-xl font-semibold leading-none text-black">{{ notes.length }}</span>
+            <span class="text-[11px] uppercase tracking-widest text-gray-400">всего</span>
           </div>
-          <span class="sync" :class="{ 'sync--loading': isUpdating }">
-            <span class="dot" :class="{ 'dot--pulse': isUpdating }"></span>
-            каждые 5 сек
-          </span>
+        </div>
+        <div class="text-right">
+          <button @click="syncNow" class="inline-flex items-center gap-1.5 text-xs text-gray-400 whitespace-nowrap min-w-[110px] hover:text-black cursor-pointer bg-transparent border-none p-0" :class="{ '!text-black': isUpdating }">
+            <span class="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0 relative" :class="{ 'bg-black animate-dot-blink': isUpdating }"></span>
+            <span :class="{ 'animate-countdown-pop': countdownPulse }">{{ countdown }}с</span>
+          </button>
         </div>
       </div>
     </header>
 
+    <!-- content centered -->
+    <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="px-4 sm:px-6 lg:px-8 pb-10">
+
     <!-- status bar -->
-    <div class="statusbar" v-if="status">
-      <div class="statusbar__fill" :style="{ width: tickerProgress + '%' }"></div>
-      <div class="statusbar__item">
-        <span class="k">Тикер</span>
-        <span class="dt" v-if="status.lastFetchTime">
-          <span class="dt__date">{{ splitDT(status.lastFetchTime).d }}</span>
-          <span class="dt__time">{{ splitDT(status.lastFetchTime).t }}</span>
-        </span>
-        <span v-else class="muted">—</span>
-        <span class="muted" v-if="status.minutesSinceFetch != null">· {{ status.minutesSinceFetch }} мин назад</span>
+    <div v-if="status" class="mt-4 relative flex flex-wrap items-center gap-x-3 sm:gap-x-5 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+      <div class="absolute inset-0 bg-gray-200 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
+      <div class="relative flex gap-2 items-baseline text-sm flex-1 min-w-0">
+        <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Тикер</span>
+        <template v-if="status.lastFetchTime">
+          <span class="text-gray-400 text-sm whitespace-nowrap">{{ splitDT(status.lastFetchTime).d }}</span>
+          <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(status.lastFetchTime).t }}</span>
+        </template>
+        <span v-else class="text-gray-400">—</span>
       </div>
-      <div class="statusbar__item">
-        <span class="k">Сейчас</span>
-        <span class="dt">
-          <span class="dt__date">{{ splitDT(status.now).d }}</span>
-          <span class="dt__time">{{ splitDT(status.now).t }}</span>
-        </span>
+      <div class="relative flex gap-2 items-baseline text-sm flex-1 min-w-0">
+        <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Сейчас</span>
+        <span class="text-gray-400 text-sm whitespace-nowrap">{{ splitDT(liveNow).d }}</span>
+        <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(liveNow).t }}</span>
       </div>
-      <div class="statusbar__item" v-if="status.lastFetchError">
-        <span class="k" style="color:#991b1b">Ошибка</span>
-        <span class="v" style="color:#991b1b">{{ status.lastFetchError }}</span>
+      <div v-if="secondsSinceFetch != null" class="relative text-right whitespace-nowrap ml-auto sm:ml-0">
+        <span class="font-bold text-sm text-black">{{ formatSec(secondsSinceFetch) }}</span>
+      </div>
+      <div v-if="status.lastFetchError" class="relative">
+        <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium" style="color:#991b1b">Ошибка</span>
+        <span class="text-sm" style="color:#991b1b">{{ status.lastFetchError }}</span>
       </div>
     </div>
 
     <!-- errors -->
-    <div v-if="status?.signingFailures?.length" class="alert">
-      <div class="alert__title">Критические ошибки · {{ status.signingFailures.length }}</div>
-      <ul class="alert__list">
+    <div v-if="status?.signingFailures?.length" class="mt-3 border border-gray-200 border-l-[3px] border-l-black bg-gray-50 rounded-lg px-3.5 py-3">
+      <div class="text-xs font-semibold tracking-wide text-black mb-1.5">Критические ошибки · {{ status.signingFailures.length }}</div>
+      <ul class="ml-4 text-sm text-gray-600 space-y-0.5">
         <li v-for="(e,i) in status.signingFailures" :key="i">{{ e }}</li>
       </ul>
     </div>
 
-    <div v-if="error" class="alert alert--error">
+    <div v-if="error" class="mt-3 border-l-[3px] border-l-red-500 bg-red-50 text-red-800 rounded-lg px-3.5 py-3">
       Ошибка загрузки: {{ error }}
     </div>
 
     <!-- toolbar -->
-    <div class="toolbar">
-      <input v-model="query" placeholder="Поиск по номеру, контрагенту, статусу…" class="search" />
-      <span class="toolbar__hint">{{ filtered.length }} из {{ notes.length }}</span>
+    <div class="mt-4 flex items-center gap-3">
+      <input v-model="query" placeholder="Номер, отправитель, получатель, водитель, грузовик, статус…" class="flex-1 max-w-[420px] h-9 px-3 border border-gray-200 rounded-lg bg-white text-sm text-black outline-none placeholder:text-gray-400 focus:border-black focus:ring-1 focus:ring-black/5" />
+      <span class="text-xs text-gray-400">{{ filtered.length }} из {{ notes.length }}</span>
     </div>
 
     <!-- empty -->
-    <div v-if="!loading && !filtered.length" class="empty">
-      <div class="empty__icon">—</div>
-      <div class="empty__text">Нет данных</div>
-      <div class="empty__sub">Накладные появятся после следующего тикера</div>
+    <div v-if="!loading && !filtered.length" class="mt-6 border border-dashed border-gray-200 rounded-xl py-10 px-6 text-center bg-gray-50">
+      <div class="text-2xl text-gray-400">—</div>
+      <div class="mt-2 font-semibold text-black">Нет данных</div>
+      <div class="mt-1 text-sm text-gray-500">Накладные появятся после следующего тикера</div>
     </div>
 
     <!-- table -->
-    <div v-else class="tablewrap">
-      <table class="table">
+    <div v-else class="mt-4 border border-gray-200 rounded-xl overflow-x-auto -webkit-overflow-scrolling-touch bg-white">
+      <table class="w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th>Номер</th>
-            <th>Создано</th>
-            <th>Подписано</th>
-            <th>Дата</th>
-            <th>Маршрут</th>
-            <th>Статус</th>
-            <th>Ошибка</th>
-            <th>Скриншоты</th>
+            <th class="text-left text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Номер / Дата</th>
+            <th class="text-left text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Маршрут</th>
+            <th class="text-center text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Статус</th>
+            <th class="text-center text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-3 py-2.5 whitespace-nowrap">Pic</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="n in filtered" :key="n.number">
-            <td class="mono strong">{{ n.number }}</td>
-            <td class="muted">{{ n.createdAt || '—' }}</td>
-            <td class="muted">{{ signedAt(n) }}</td>
-            <td>{{ n.date || '—' }}</td>
-            <td>
-              <div class="route-col">
-                <div class="route-line"><span class="k">Отправитель:</span> {{ n.consignor || '—' }}</div>
-                <div class="route-line"><span class="k">Получатель:</span> {{ n.consignee || '—' }}</div>
-                <div v-if="n.driver || n.truck" class="route__meta" style="margin-top:6px">
-                  <span v-if="n.driver">{{ n.driver }}</span>
-                  <span v-if="n.driver && n.truck"> · </span>
-                  <span v-if="n.truck" class="mono">{{ n.truck }}</span>
-                </div>
-                <div class="route__meta route__meta--addr">
-                  {{ n.consignorAddress || '—' }} → {{ n.consigneeAddress || '—' }}
-                </div>
-                <div v-if="n.receptionAddress" class="route__meta route__meta--delivery">
-                  <span class="k">Приём:</span> <strong>{{ n.receptionAddress }}</strong>
-                </div>
-                <div v-if="n.deliveryAddress" class="route__meta route__meta--delivery">
-                  <span class="k">Доставка:</span> <strong>{{ n.deliveryAddress }}</strong>
-                </div>
+          <tr v-for="n in filtered" :key="n.number" class="border-b border-gray-100 last:border-none hover:bg-gray-50">
+            <!-- номер / дата -->
+            <td class="px-3 py-2.5 align-top">
+              <div class="flex flex-col gap-0.5">
+                <span class="font-mono font-semibold text-sm">{{ n.number }}</span>
+                <span class="text-xs text-gray-400">{{ n.date || '—' }}</span>
+                <span class="text-[11px] text-gray-400 flex gap-1 items-baseline"><span class="uppercase tracking-wide text-gray-400 font-medium">созд.</span> {{ splitDT(n.createdAt).t || '—' }}</span>
+                <span class="text-[11px] text-gray-400 flex gap-1 items-baseline"><span class="uppercase tracking-wide text-gray-400 font-medium">подп.</span> {{ splitDT(signedAt(n)).t || '—' }}</span>
               </div>
             </td>
-            <td><span :class="statusClass(n.status)">{{ n.status || '—' }}</span></td>
-            <td class="err">{{ n.error || '' }}</td>
-            <td>
-              <div class="shots">
-                <button v-for="(s,i) in n.shots" :key="s" class="shot" @click="openCarousel(n,i)" :title="s">
-                  <img :src="`/screenshots/${n.number}/${s}`" loading="lazy" alt="" />
-                </button>
-                <span v-if="!n.shots?.length" class="muted">—</span>
+            <!-- маршрут -->
+            <td class="px-3 py-2.5 align-top">
+              <div class="flex flex-col gap-0.5 leading-snug">
+                <div class="text-sm text-black break-all"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Отпр.</span> {{ n.consignor || '—' }}</div>
+                <div class="text-sm text-black break-all"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Получ.</span> {{ n.consignee || '—' }}</div>
+                <div v-if="n.driver || n.truck" class="mt-1 text-xs text-gray-400">
+                  <span v-if="n.driver">{{ n.driver }}</span>
+                  <span v-if="n.driver && n.truck"> · </span>
+                  <span v-if="n.truck" class="font-mono">{{ n.truck }}</span>
+                </div>
+                <div class="text-xs text-gray-400 mt-0.5">{{ n.consignorAddress || '—' }} → {{ n.consigneeAddress || '—' }}</div>
+                <div v-if="n.receptionAddress" class="text-xs text-gray-400 mt-0.5"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Приём:</span> <strong>{{ n.receptionAddress }}</strong></div>
+                <div v-if="n.deliveryAddress" class="text-xs text-gray-400 mt-0.5"><span class="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Доставка:</span> <strong>{{ n.deliveryAddress }}</strong></div>
               </div>
+            </td>
+            <!-- статус -->
+            <td class="px-3 py-2.5 align-middle text-center">
+              <template v-if="n.status">
+                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-5 px-2 rounded-full text-[11px] font-semibold bg-black text-white border border-black whitespace-nowrap">Sign</span>
+                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-5 px-2 rounded-full text-[11px] font-semibold bg-white text-red-700 border border-red-200 whitespace-nowrap">ошибка</span>
+                <span v-else class="inline-flex items-center justify-center h-5 px-2 rounded-full text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-200 whitespace-nowrap">{{ n.status }}</span>
+              </template>
+              <span v-if="n.error" class="block text-xs text-red-700 leading-snug break-all">{{ n.error }}</span>
+              <span v-if="!n.status && !n.error" class="text-gray-400">—</span>
+            </td>
+            <!-- скриншоты -->
+            <td class="px-3 pt-[30px] pb-2.5 align-middle text-center">
+              <template v-if="n.shots?.length">
+                <button class="block w-9 h-6 border border-gray-200 rounded overflow-hidden bg-gray-50 cursor-pointer p-0" @click="openCarousel(n,0)" :title="n.shots[0]">
+                  <img :src="`/screenshots/${n.number}/${n.shots[0]}`" loading="lazy" class="w-full h-full object-cover" />
+                </button>
+                <span v-if="n.shots.length > 1" class="text-xs text-gray-400 ml-1">+{{ n.shots.length - 1 }}</span>
+              </template>
+              <span v-else class="text-gray-400">—</span>
             </td>
           </tr>
         </tbody>
@@ -226,137 +303,59 @@ const tickerProgress = computed(() => {
     </div>
 
     <!-- ticker notes -->
-    <div v-if="status?.lastNotes?.length" class="card">
-      <div class="card__head">
-        <h3>Последний тикер</h3>
-        <span class="muted">{{ status.lastNotesCount }} накладных</span>
+    <div v-if="status?.lastNotes?.length" class="mt-4 border border-gray-200 rounded-xl overflow-hidden bg-white">
+      <div class="flex justify-between items-baseline px-3.5 py-2.5 border-b border-gray-200 bg-gray-50">
+        <h3 class="text-sm font-semibold text-black">Последний тикер</h3>
+        <span class="text-gray-400 text-xs">{{ status.lastNotesCount }} накладных</span>
       </div>
-      <div class="card__body mono">
-        <div v-for="n in status.lastNotes" :key="n.number" class="ticker-row">
-          <span class="strong">{{ n.number }}</span>
-          <span class="muted">от {{ n.date }}</span>
+      <div class="px-3.5 py-2">
+        <div v-for="n in status.lastNotes" :key="n.number" class="flex gap-3 py-1.5 border-b border-gray-100 last:border-none text-[12.5px] flex-wrap">
+          <span class="font-semibold">{{ n.number }}</span>
+          <span class="text-gray-400">от {{ n.date }}</span>
           <span>{{ n.consignor }} → {{ n.consignee }}</span>
-          <span class="muted">{{ n.carrier }}</span>
+          <span class="text-gray-400">{{ n.carrier }}</span>
         </div>
       </div>
     </div>
 
     <!-- carousel modal -->
     <Teleport to="body">
-      <div v-if="showCarousel" class="overlay" @click.self="closeCarousel">
-        <div class="carousel">
-          <div class="carousel__top">
-            <span class="mono strong">{{ cNumber }} · {{ cIndex + 1 }} / {{ cShots.length }}</span>
-            <span class="mono muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw">{{ cShots[cIndex] }}</span>
-            <button class="btn btn--close" @click="closeCarousel">✕</button>
+      <div v-if="showCarousel" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-6" @click.self="closeCarousel">
+        <div class="bg-white rounded-xl overflow-hidden w-[min(1100px,96vw)] max-h-[90vh] flex flex-col border border-gray-200">
+          <div class="flex items-center gap-3 px-3.5 py-2.5 border-b border-gray-200 bg-gray-50">
+            <span class="font-mono font-semibold text-sm">{{ cNumber }} · {{ cIndex + 1 }} / {{ cShots.length }}</span>
+            <span class="font-mono text-xs text-gray-400 truncate max-w-[40vw]">{{ cShots[cIndex] }}</span>
+            <button class="ml-auto w-7 h-7 rounded-lg border border-gray-200 bg-white cursor-pointer text-sm flex items-center justify-center hover:border-black" @click="closeCarousel">✕</button>
           </div>
-          <div class="carousel__main">
-            <button class="nav nav--left" @click="prev" aria-label="prev">‹</button>
-            <img :src="shotUrl(cShots[cIndex])" class="carousel__img" alt="" />
-            <button class="nav nav--right" @click="next" aria-label="next">›</button>
+          <div class="relative bg-black flex items-center justify-center min-h-[320px] max-h-[62vh]">
+            <button class="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full border border-white/30 bg-white/90 text-black text-xl cursor-pointer flex items-center justify-center" @click="prev" aria-label="prev">‹</button>
+            <img :src="shotUrl(cShots[cIndex])" class="max-w-full max-h-[62vh] object-contain" />
+            <button class="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full border border-white/30 bg-white/90 text-black text-xl cursor-pointer flex items-center justify-center" @click="next" aria-label="next">›</button>
           </div>
-          <div class="thumbs">
-            <button v-for="(s,i) in cShots" :key="s" class="thumb" :class="{ 'thumb--active': i === cIndex }" @click="cIndex = i">
-              <img :src="shotUrl(s)" loading="lazy" alt="" />
+          <div class="flex gap-2 px-3 py-2.5 overflow-x-auto bg-white border-t border-gray-200">
+            <button v-for="(s,i) in cShots" :key="s" class="flex-shrink-0 w-16 h-11 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-pointer p-0" :class="{ 'border-black ring-2 ring-black/10': i === cIndex }" @click="cIndex = i">
+              <img :src="shotUrl(s)" loading="lazy" class="w-full h-full object-cover" />
             </button>
           </div>
         </div>
       </div>
     </Teleport>
 
-    <footer class="footer">
-      <a href="/">Legacy HTML</a>
-      <span class="muted">·</span>
-      <span class="muted">Обновление данных каждые 5 секунд</span>
+    <footer class="mt-5 flex gap-2 text-xs text-gray-500">
+      <a href="/" class="text-black underline underline-offset-1 hover:text-gray-600">Legacy HTML</a>
+      <span>·</span>
+      <span>Обновление данных каждые 5 секунд</span>
     </footer>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.page {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 24px 40px;
+@keyframes dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
-
-/* header */
-.header {
-  border-bottom: 1px solid var(--border);
-  margin: 0 -24px;
-  padding: 28px 24px 20px;
-  background: #fff;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.header__inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-}
-.title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: #0a0a0a;
-  line-height: 1.1;
-}
-.subtitle {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.header__right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.count {
-  text-align: right;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 14px;
-  background: var(--surface);
-}
-.count__num {
-  display: block;
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1;
-  color: #0a0a0a;
-}
-.count__label {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.sync {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  min-width: 128px;
-  justify-content: flex-start;
-}
-.sync--loading {
-  color: #0a0a0a;
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #9ca3af;
-  position: relative;
-  flex-shrink: 0;
-}
-.dot--pulse {
-  background: #0a0a0a;
+.animate-dot-blink {
   animation: dot-blink 0.7s step-end infinite;
 }
 .dot--pulse::after {
@@ -367,445 +366,16 @@ const tickerProgress = computed(() => {
   border: 1px solid #0a0a0a;
   animation: dot-ping 0.85s cubic-bezier(0,0,0.2,1) infinite;
 }
-@keyframes dot-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
 @keyframes dot-ping {
   0% { transform: scale(1); opacity: 0.45; }
   100% { transform: scale(2.4); opacity: 0; }
 }
-
-/* statusbar */
-.statusbar {
-  margin-top: 16px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  padding: 10px 14px;
-  background: #fafafa;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  position: relative;
-  overflow: hidden;
+@keyframes countdown-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.5); color: #0a0a0a; }
+  100% { transform: scale(1); }
 }
-.statusbar__fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: #e5e7eb;
-  transition: width 1s linear;
-  pointer-events: none;
-}
-.statusbar__item {
-  position: relative;
-  z-index: 1;
-}
-.statusbar__item {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  font-size: 13px;
-}
-.k {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-.v {
-  color: #0a0a0a;
-}
-.dt {
-  display: inline-flex;
-  gap: 6px;
-  align-items: baseline;
-}
-.dt__date {
-  color: #9ca3af;
-  font-size: 13px;
-  font-weight: 400;
-}
-.dt__time {
-  color: #0a0a0a;
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: -0.01em;
-}
-.muted {
-  color: var(--text-muted);
-}
-
-/* alert */
-.alert {
-  margin-top: 12px;
-  border: 1px solid #e5e7eb;
-  border-left: 3px solid #0a0a0a;
-  background: #fafafa;
-  border-radius: 10px;
-  padding: 12px 14px;
-}
-.alert--error {
-  border-left-color: #dc2626;
-  background: #fef2f2;
-  color: #7f1d1d;
-}
-.alert__title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #0a0a0a;
-  margin-bottom: 6px;
-}
-.alert__list {
-  margin-left: 16px;
-  font-size: 13px;
-  color: #52525b;
-}
-.alert__list li + li {
-  margin-top: 2px;
-}
-
-/* toolbar */
-.toolbar {
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.search {
-  flex: 1;
-  max-width: 420px;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  font-size: 13px;
-  color: #0a0a0a;
-  outline: none;
-}
-.search::placeholder {
-  color: var(--text-muted);
-}
-.search:focus {
-  border-color: #0a0a0a;
-  box-shadow: 0 0 0 3px rgba(10, 10, 10, 0.06);
-}
-.toolbar__hint {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* empty */
-.empty {
-  margin-top: 24px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  padding: 40px 24px;
-  text-align: center;
-  background: #fafafa;
-}
-.empty__icon {
-  font-size: 20px;
-  color: var(--text-muted);
-}
-.empty__text {
-  margin-top: 8px;
-  font-weight: 600;
-  color: #0a0a0a;
-}
-.empty__sub {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* table */
-.tablewrap {
-  margin-top: 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #fff;
-}
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.table thead th {
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  background: #fafafa;
-  border-bottom: 1px solid var(--border);
-  padding: 10px 12px;
-  white-space: nowrap;
-}
-.table tbody td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f0f0f0;
-  vertical-align: middle;
-}
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-.table tbody tr:hover {
-  background: #fafafa;
-}
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px;
-}
-.strong {
-  font-weight: 600;
-  color: #0a0a0a;
-}
-.err {
-  color: #991b1b;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.route-col {
-  max-width: 340px;
-  line-height: 1.35;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.route-line {
-  word-break: break-word;
-  white-space: normal;
-  font-size: 13px;
-  color: #0a0a0a;
-}
-.route__arrow {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.route__meta {
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--text-muted);
-  max-width: 320px;
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.35;
-}
-.route__meta--addr {
-  color: #9ca3af;
-  margin-top: 2px;
-}
-.badge {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: #0a0a0a;
-  white-space: nowrap;
-}
-.badge--ok {
-  background: #0a0a0a;
-  color: #fff;
-  border-color: #0a0a0a;
-}
-.badge--err {
-  background: #fff;
-  color: #991b1b;
-  border-color: #fecaca;
-}
-.badge--wait {
-  background: #fafafa;
-  color: #52525b;
-}
-.shots {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  max-width: 220px;
-}
-.shot {
-  display: block;
-  width: 64px;
-  height: 42px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: #f5f5f5;
-  cursor: pointer;
-  padding: 0;
-}
-.shot img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.shot:hover {
-  border-color: #0a0a0a;
-}
-
-/* card */
-.card {
-  margin-top: 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #fff;
-}
-.card__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  background: #fafafa;
-}
-.card__head h3 {
-  font-size: 13px;
-  font-weight: 600;
-  color: #0a0a0a;
-}
-.card__body {
-  padding: 8px 14px;
-}
-.ticker-row {
-  display: flex;
-  gap: 12px;
-  padding: 6px 0;
-  border-bottom: 1px solid #f5f5f5;
-  font-size: 12.5px;
-  flex-wrap: wrap;
-}
-.ticker-row:last-child {
-  border-bottom: none;
-}
-
-/* carousel */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 10, 10, 0.72);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 24px;
-}
-.carousel {
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  width: min(1100px, 96vw);
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #e5e7eb;
-}
-.carousel__top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  background: #fafafa;
-}
-.btn--close {
-  margin-left: auto;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-}
-.btn--close:hover { border-color: #0a0a0a; }
-.carousel__main {
-  position: relative;
-  background: #0a0a0a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
-  max-height: 62vh;
-}
-.carousel__img {
-  max-width: 100%;
-  max-height: 62vh;
-  object-fit: contain;
-  display: block;
-}
-.nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.3);
-  background: rgba(255,255,255,0.9);
-  color: #0a0a0a;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.nav:hover { background: #fff; }
-.nav--left { left: 12px; }
-.nav--right { right: 12px; }
-.thumbs {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px;
-  overflow-x: auto;
-  background: #fff;
-  border-top: 1px solid var(--border);
-}
-.thumb {
-  flex-shrink: 0;
-  width: 64px;
-  height: 44px;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: #f5f5f5;
-  cursor: pointer;
-  padding: 0;
-}
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb--active { border-color: #0a0a0a; box-shadow: 0 0 0 2px #0a0a0a; }
-
-/* footer */
-.footer {
-  margin-top: 20px;
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.footer a {
-  color: #0a0a0a;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.footer a:hover {
-  color: #52525b;
+.animate-countdown-pop {
+  animation: countdown-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 </style>

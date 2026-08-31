@@ -21,6 +21,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vitest/eslint-plugin": "^1.6.23",
     "@vue/test-utils": "^2.4.11",
@@ -32,6 +33,7 @@
     "jsdom": "^29.1.1",
     "npm-run-all2": "^9.0.2",
     "oxlint": "~1.74.0",
+    "tailwindcss": "^4.3.3",
     "vite": "^8.1.5",
     "vite-plugin-vue-devtools": "^8.1.5",
     "vitest": "^4.1.10",
