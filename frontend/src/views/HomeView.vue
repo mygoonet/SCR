@@ -180,7 +180,7 @@ function formatSec(sec) {
         </div>
         <div class="text-right">
           <button @click="syncNow" class="inline-flex items-center gap-1.5 text-xs text-gray-400 whitespace-nowrap min-w-[110px] hover:text-black cursor-pointer bg-transparent border-none p-0" :class="{ '!text-black': isUpdating }">
-            <span class="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0 relative" :class="{ 'bg-black animate-dot-blink': isUpdating }"></span>
+            <span class="w-2 h-2 rounded-full flex-shrink-0 relative" :class="countdownPulse ? 'bg-black dot--pulse' : 'bg-gray-400'"></span>
             <span :class="{ 'animate-countdown-pop': countdownPulse }">{{ countdown }}с</span>
           </button>
         </div>
@@ -191,23 +191,23 @@ function formatSec(sec) {
     <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="px-4 sm:px-6 lg:px-8 pb-10">
 
     <!-- status bar -->
-    <div v-if="status" class="mt-4 relative flex flex-wrap items-center gap-x-3 sm:gap-x-5 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+    <div v-if="status" class="mt-4 relative flex items-center px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
       <div class="absolute inset-0 bg-gray-200 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
-      <div class="relative flex gap-2 items-baseline text-sm flex-1 min-w-0">
-        <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Тикер</span>
-        <template v-if="status.lastFetchTime">
-          <span class="text-gray-400 text-sm whitespace-nowrap">{{ splitDT(status.lastFetchTime).d }}</span>
-          <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(status.lastFetchTime).t }}</span>
-        </template>
-        <span v-else class="text-gray-400">—</span>
+      <div class="relative flex flex-col gap-y-1 text-sm flex-1 min-w-0">
+        <div class="flex gap-2 items-baseline">
+          <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Тикер</span>
+          <template v-if="status.lastFetchTime">
+            <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(status.lastFetchTime).t }}</span>
+          </template>
+          <span v-else class="text-gray-400">—</span>
+        </div>
+        <div class="flex gap-2 items-baseline">
+          <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Сейчас</span>
+          <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(liveNow).t }}</span>
+        </div>
       </div>
-      <div class="relative flex gap-2 items-baseline text-sm flex-1 min-w-0">
-        <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap">Сейчас</span>
-        <span class="text-gray-400 text-sm whitespace-nowrap">{{ splitDT(liveNow).d }}</span>
-        <span class="font-bold text-sm text-black whitespace-nowrap">{{ splitDT(liveNow).t }}</span>
-      </div>
-      <div v-if="secondsSinceFetch != null" class="relative text-right whitespace-nowrap ml-auto sm:ml-0">
-        <span class="font-bold text-sm text-black">{{ formatSec(secondsSinceFetch) }}</span>
+      <div v-if="secondsSinceFetch != null" class="relative flex items-center pl-4 text-sm self-center">
+        <span class="font-bold text-black">{{ formatSec(secondsSinceFetch) }}</span>
       </div>
       <div v-if="status.lastFetchError" class="relative">
         <span class="text-[11px] uppercase tracking-widest text-gray-400 font-medium" style="color:#991b1b">Ошибка</span>
