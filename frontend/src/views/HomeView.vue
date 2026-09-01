@@ -167,7 +167,7 @@ function formatSec(sec) {
   <div>
     <!-- header full-width -->
     <header class="border-b border-gray-200 pt-7 pb-5 bg-white sticky top-0 z-10">
-      <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="grid grid-cols-3 items-center gap-x-8 px-4 sm:px-6 lg:px-8">
+      <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="grid grid-cols-3 items-center gap-x-8 px-8 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-0.5">
           <h1 class="text-lg sm:text-xl font-semibold tracking-tight text-black leading-tight">Накладные</h1>
           <p class="text-xs text-gray-400 leading-snug">Контур Логистика · автоматическое подписание</p>
@@ -179,7 +179,7 @@ function formatSec(sec) {
           </div>
         </div>
         <div class="text-right">
-          <button @click="syncNow" class="inline-flex items-center gap-1.5 text-xs text-gray-400 whitespace-nowrap min-w-[110px] hover:text-black cursor-pointer bg-transparent border-none p-0" :class="{ '!text-black': isUpdating }">
+          <button @click="syncNow" class="sm:pl-12 pl-20 inline-flex items-center gap-1.5 text-xs text-gray-400 whitespace-nowrap min-w-[110px] hover:text-black cursor-pointer bg-transparent border-none p-0" :class="{ '!text-black': isUpdating }">
             <span class="w-2 h-2 rounded-full flex-shrink-0 relative" :class="countdownPulse ? 'bg-black dot--pulse' : 'bg-gray-400'"></span>
             <span :class="{ 'animate-countdown-pop': countdownPulse }">{{ countdown }}с</span>
           </button>
@@ -188,16 +188,16 @@ function formatSec(sec) {
     </header>
 
     <!-- content centered -->
-    <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="px-4 sm:px-6 lg:px-8 pb-10">
+    <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="pt-1 px-4 sm:px-6 lg:px-8 ">
     <!-- status bar - по центру как хедер, full width внутри контейнера -->
-    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch w-full bg-gray-50 border border-gray-200 rounded-lg overflow-hidden min-w-0">
+    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch w-full bg-gray-50 border border-gray-200 rounded-lg overflow-hidden min-w-0 pb-0">
       <div class="absolute inset-0 bg-gray-200 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
       <div class="relative flex items-baseline gap-1.5 sm:gap-2 px-3 py-2 min-w-0">
-        <span class="text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap shrink-0 leading-none">last tic</span>
-        <span class="font-bold text-[13px] sm:text-[15px] text-black whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
+        <span class="text-[10px] sm:text-[12px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap shrink-0 leading-none">last tic</span>
+        <span class="font-bold text-[10px] sm:text-[12px] text-black whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
       </div>
       <div v-if="secondsSinceFetch != null" class="relative flex items-center justify-center px-3 sm:px-5 min-w-[66px] sm:min-w-[90px] shrink-0">
-        <span class="font-bold text-sm sm:text-base text-black whitespace-nowrap tabular-nums leading-none">{{ formatSec(secondsSinceFetch) }}</span>
+        <span class="font-bold text-[10px] sm:text-[12px] text-black whitespace-nowrap tabular-nums leading-none">{{ formatSec(secondsSinceFetch) }}</span>
       </div>
       <div v-if="status.lastFetchError" class="relative col-span-2 border-t border-red-200 bg-red-50 px-3 py-1.5 flex gap-2 items-baseline flex-wrap">
         <span class="text-[10px] uppercase tracking-widest font-medium shrink-0" style="color:#991b1b">Ошибка</span>
@@ -218,21 +218,21 @@ function formatSec(sec) {
     </div>
 
     <!-- toolbar -->
-    <div class="mt-4 flex items-center gap-3">
+    <div class="pt-1 pb-[5px] flex items-center gap-6">
       <input v-model="query" placeholder="Номер, отправитель, получатель, водитель, грузовик, статус…" class="flex-1 max-w-[420px] h-9 px-3 border border-gray-200 rounded-lg bg-white text-sm text-black outline-none placeholder:text-gray-400 focus:border-black focus:ring-1 focus:ring-black/5" />
       <span class="text-xs text-gray-400">{{ filtered.length }} из {{ notes.length }}</span>
     </div>
 
     <!-- empty -->
-    <div v-if="!loading && !filtered.length" class="mt-6 border border-dashed border-gray-200 rounded-xl py-10 px-6 text-center bg-gray-50">
+    <div v-if="!loading && !filtered.length" class="pt-6  border border-dashed border-gray-200 rounded-xl py-10 px-6 text-center bg-gray-50">
       <div class="text-2xl text-gray-400">—</div>
       <div class="mt-2 font-semibold text-black">Нет данных</div>
       <div class="mt-1 text-sm text-gray-500">Накладные появятся после следующего тикера</div>
     </div>
 
     <!-- table: адаптив без скрытия полей -->
-    <div v-else class="mt-4 border border-gray-200 rounded-xl overflow-hidden sm:overflow-x-auto bg-white">
-      <table class="w-full table-fixed sm:table-auto border-collapse text-sm">
+    <div v-else class="mt-0  pb-0 border border-gray-200 rounded-xl overflow-hidden sm:overflow-x-auto bg-white">
+      <table class="w-full table-fixed sm:table-auto border-collapse text-sm" >
         <colgroup>
           <col class="w-[28%] sm:w-auto" />
           <col class="w-[40%] sm:w-auto" />
@@ -301,7 +301,7 @@ function formatSec(sec) {
     </div>
 
     <!-- ticker notes -->
-    <div v-if="status?.lastNotes?.length" class="mt-4 border border-gray-200 rounded-xl overflow-hidden bg-white">
+    <div v-if="status?.lastNotes?.length" class="mt-0 pt-0 border border-gray-200 rounded-xl overflow-hidden bg-white">
       <div class="flex justify-between items-baseline px-3.5 py-2.5 border-b border-gray-200 bg-gray-50">
         <h3 class="text-sm font-semibold text-black">Последний тикер</h3>
         <span class="text-gray-400 text-xs">{{ status.lastNotesCount }} накладных</span>
@@ -340,7 +340,7 @@ function formatSec(sec) {
     </Teleport>
 
     <footer class="mt-5 flex gap-2 text-xs text-gray-500">
-      <a href="/" class="text-black underline underline-offset-1 hover:text-gray-600">Legacy HTML</a>
+      <a href="/legacy" class="text-black underline underline-offset-1 hover:text-gray-600">Legacy HTML</a>
       <span>·</span>
       <span>Обновление данных каждые 5 секунд</span>
     </footer>

@@ -16,6 +16,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:2000',
       '/screenshots': 'http://localhost:2000',
+      '/legacy': 'http://localhost:2000',
     },
   },
   resolve: {
