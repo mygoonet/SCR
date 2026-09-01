@@ -231,7 +231,7 @@ function formatSec(sec) {
     </div>
 
     <!-- table: адаптив без скрытия полей -->
-    <div v-else class="mt-0  pb-0 border border-gray-200 rounded-xl overflow-hidden sm:overflow-x-auto bg-white">
+    <div v-else class="mt-0 pb-[10px] border border-gray-200 rounded-xl overflow-hidden sm:overflow-x-auto bg-white">
       <table class="w-full table-fixed sm:table-auto border-collapse text-sm" >
         <colgroup>
           <col class="w-[28%] sm:w-auto" />
@@ -301,7 +301,10 @@ function formatSec(sec) {
     </div>
 
     <!-- ticker notes -->
-    <div v-if="status?.lastNotes?.length" class="mt-0 pt-0 border border-gray-200 rounded-xl overflow-hidden bg-white">
+
+      <div class="pt-1" ></div>
+
+    <div v-if="status?.lastNotes?.length" class="mt-0  border border-gray-200 rounded-xl overflow-hidden bg-white">
       <div class="flex justify-between items-baseline px-3.5 py-2.5 border-b border-gray-200 bg-gray-50">
         <h3 class="text-sm font-semibold text-black">Последний тикер</h3>
         <span class="text-gray-400 text-xs">{{ status.lastNotesCount }} накладных</span>
@@ -339,7 +342,7 @@ function formatSec(sec) {
       </div>
     </Teleport>
 
-    <footer class="mt-5 flex gap-2 text-xs text-gray-500">
+    <footer class="mt-[3px] mb-[3px] flex justify-center gap-2 text-xs text-gray-500">
       <a href="/legacy" class="text-black underline underline-offset-1 hover:text-gray-600">Legacy HTML</a>
       <span>·</span>
       <span>Обновление данных каждые 5 секунд</span>
