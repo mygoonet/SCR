@@ -168,9 +168,9 @@ function formatSec(sec) {
 <template>
   <div>
     <!-- header full-width -->
-    <header class="border-b border-gray-200 dark:border-gray-800 pt-7 pb-5 bg-white dark:bg-gray-950 sticky top-0 z-10">
-      <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="grid grid-cols-3 items-center gap-x-8 px-8 sm:px-6 lg:px-8">
-        <div class="flex flex-col gap-0.5">
+    <header class="border-b border-gray-200 dark:border-gray-800 pt-6 pb-4 bg-white dark:bg-gray-950 sticky top-0 z-10">
+      <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="grid grid-cols-3 items-center gap-x-8 px-6 sm:px-6 lg:px-8">
+        <div class="flex flex-col gap-1">
           <h1 class="text-lg sm:text-xl font-semibold tracking-tight text-black dark:text-white leading-tight">Накладные</h1>
           <p class="text-xs text-gray-400 leading-snug">Контур Логистика · автоматическое подписание</p>
         </div>
@@ -194,7 +194,7 @@ function formatSec(sec) {
     </header>
 
     <!-- content centered -->
-    <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="pt-1 px-4 sm:px-6 lg:px-8 ">
+    <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="pt-4 px-4 sm:px-6 lg:px-8 ">
     <!-- status bar - по центру как хедер, full width внутри контейнера -->
     <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden min-w-0 pb-0">
       <div class="absolute inset-0 bg-gray-200 dark:bg-gray-700 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
@@ -224,13 +224,13 @@ function formatSec(sec) {
     </div>
 
     <!-- toolbar -->
-    <div class="pt-1 pb-[5px] flex items-center gap-6">
+    <div class="pt-2 pb-2 flex items-center gap-6">
       <input v-model="query" placeholder="Номер, отправитель, получатель, водитель, грузовик, статус…" class="flex-1 max-w-[420px] h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-black dark:text-white outline-none placeholder:text-gray-400 focus:border-black dark:focus:border-white focus:ring-1 focus:ring-black/5" />
       <span class="text-xs text-gray-400">{{ filtered.length }} из {{ notes.length }}</span>
     </div>
 
     <!-- empty -->
-    <div v-if="!loading && !filtered.length" class="pt-6  border border-dashed border-gray-200 dark:border-gray-800 rounded-xl py-10 px-6 text-center bg-gray-50 dark:bg-gray-900">
+    <div v-if="!loading && !filtered.length" class="pt-6 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl py-8 px-6 text-center bg-gray-50 dark:bg-gray-900">
       <div class="text-2xl text-gray-400">—</div>
       <div class="mt-2 font-semibold text-black dark:text-white">Нет данных</div>
       <div class="mt-1 text-sm text-gray-500">Накладные появятся после следующего тикера</div>
@@ -282,9 +282,9 @@ function formatSec(sec) {
             <!-- статус -->
             <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-middle text-center ">
               <template v-if="n.status">
-                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-black dark:bg-white text-white dark:text-black border border-black dark:border-white whitespace-nowrap leading-none">Sign</span>
-                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-white dark:bg-gray-900 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900 whitespace-nowrap leading-none">ошибка</span>
-                <span v-else class="inline-flex items-center justify-center h-[25px] sm:h-[25px] px-[15px] rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 whitespace-nowrap leading-none">{{ n.status }}</span>
+                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-2 sm:px-2.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 whitespace-nowrap leading-none">Sign</span>
+                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-2 sm:px-2.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 whitespace-nowrap leading-none">ошибка</span>
+                <span v-else class="inline-flex items-center justify-center h-[28px] sm:h-[28px] px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 whitespace-nowrap leading-none">{{ n.status }}</span>
               </template>
               <span v-if="n.error" class="block text-[11px] sm:text-xs text-red-700 dark:text-red-400 leading-tight break-words [overflow-wrap:anywhere] mt-1">{{ n.error }}</span>
               <span v-if="!n.status && !n.error" class="text-gray-400 text-xs">—</span>
@@ -292,11 +292,11 @@ function formatSec(sec) {
             <!-- скриншоты -->
             <td class="px-1 sm:px-3 py-2 sm:py-2.5 align-middle text-center">
               <template v-if="n.shots?.length">
-                <div class="pt-[10px]">
+                <div class="pt-[10px] flex flex-col items-center gap-0.5">
                   <button class="mx-auto block w-7 h-5 sm:w-9 sm:h-6 border border-gray-200 dark:border-gray-700 rounded overflow-hidden bg-gray-50 dark:bg-gray-900 cursor-pointer p-0" @click="openCarousel(n,0)" :title="n.shots[0]">
                     <img :src="`/screenshots/${n.number}/${n.shots[0]}`" loading="lazy" class="w-full h-full object-cover" />
                   </button>
-                  <span v-if="n.shots.length > 1" class="block text-[10px] sm:text-xs text-gray-400 leading-none mt-0.5">+{{ n.shots.length - 1 }}</span>
+                  <span v-if="n.shots.length > 1" class="text-[10px] sm:text-xs text-gray-400 leading-none">{{ n.shots.length - 1 }}</span>
                 </div>
               </template>
               <span v-else class="text-gray-400 text-xs">—</span>
@@ -335,9 +335,9 @@ function formatSec(sec) {
             <button class="ml-auto w-7 h-7 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 cursor-pointer text-sm flex items-center justify-center hover:border-black dark:hover:border-white" @click="closeCarousel">✕</button>
           </div>
           <div class="relative bg-black flex items-center justify-center min-h-[320px] max-h-[62vh]">
-            <button class="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full border border-white/30 bg-white/90 text-black text-xl cursor-pointer flex items-center justify-center" @click="prev" aria-label="prev">‹</button>
+            <button class="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border border-white/20 bg-black/40 text-white/80 text-sm cursor-pointer flex items-center justify-center hover:bg-black/60 hover:text-white" @click="prev" aria-label="prev">‹</button>
             <img :src="shotUrl(cShots[cIndex])" class="max-w-full max-h-[62vh] object-contain" />
-            <button class="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full border border-white/30 bg-white/90 text-black text-xl cursor-pointer flex items-center justify-center" @click="next" aria-label="next">›</button>
+            <button class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border border-white/20 bg-black/40 text-white/80 text-sm cursor-pointer flex items-center justify-center hover:bg-black/60 hover:text-white" @click="next" aria-label="next">›</button>
           </div>
           <div class="flex gap-2 px-3 py-2.5 overflow-x-auto bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800">
             <button v-for="(s,i) in cShots" :key="s" class="flex-shrink-0 w-16 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 cursor-pointer p-0" :class="{ 'border-black ring-2 ring-black/10 dark:border-white dark:ring-white/20': i === cIndex }" @click="cIndex = i">
@@ -351,7 +351,7 @@ function formatSec(sec) {
     </div>
   </div>
 
-  <footer class="w-full flex justify-center gap-2 text-xs text-gray-500 pt-[20px] pb-[40px]">
+  <footer class="w-full flex justify-center gap-2 text-xs text-gray-500 pt-5 pb-10">
     <a href="/legacy" class="text-black dark:text-white underline underline-offset-1 hover:text-gray-600 dark:hover:text-gray-400">Legacy HTML</a>
     <span>·</span>
     <span>Обновление данных каждые 5 секунд</span>
@@ -384,6 +384,6 @@ function formatSec(sec) {
   100% { transform: scale(1); }
 }
 .animate-countdown-pop {
-  animation: countdown-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: countdown-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 </style>
