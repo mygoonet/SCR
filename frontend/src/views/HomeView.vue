@@ -274,7 +274,7 @@ function formatSec(sec) {
               </div>
             </td>
             <!-- статус -->
-            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-middle text-center">
+            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-middle text-center ">
               <template v-if="n.status">
                 <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-black text-white border border-black whitespace-nowrap leading-none">Sign</span>
                 <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-white text-red-700 border border-red-200 whitespace-nowrap leading-none">ошибка</span>
