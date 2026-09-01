@@ -25,8 +25,14 @@ import (
 func StartWebServer(addr string) {
 	mux := http.NewServeMux()
 
-	// legacy
-	mux.HandleFunc("/", handleIndex)
+	// root → Vue SPA
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/vue/", http.StatusMovedPermanently)
+	})
+
+	// legacy HTML
+	mux.HandleFunc("/legacy", handleLegacyHTML)
+	mux.HandleFunc("/legacy/", handleLegacyHTML)
 
 	// api
 	mux.HandleFunc("/api/notes", handleAPINotes)
@@ -49,9 +55,9 @@ func StartWebServer(addr string) {
 		}
 	}
 
-	log.Printf("Web: legacy  http://localhost%s/", addr)
-	log.Printf("Web: vue     http://localhost%s/vue", addr)
-	log.Printf("Web: api     http://localhost%s/api/notes", addr)
+	log.Printf("Web: vue      http://localhost%s/vue", addr)
+	log.Printf("Web: legacy   http://localhost%s/legacy", addr)
+	log.Printf("Web: api      http://localhost%s/api/notes", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Printf("Web server error: %v", err)
 	}
@@ -122,7 +128,7 @@ func handleAPINotes(w http.ResponseWriter, r *http.Request) {
 		Number string   `json:"number"`
 		Shots  []string `json:"shots"`
 	}
-	// собираем как в handleIndex, сортируем по created
+	// собираем как в handleLegacyHTML, сортируем по created
 	type tmp struct {
 		num     string
 		created time.Time
@@ -198,15 +204,9 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// ─── Legacy HTML (обратная совместимость) ──────────────────────────────────
+// ─── Legacy HTML ─────────────────────────────────────────────────────────────
 
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	// /vue* и /api* и /assets* и /screenshots* уже обработаны выше,
-	// но "/" матчит всё — отдаём 404 для неизвестных путей кроме "/"
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
+func handleLegacyHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	entries, err := os.ReadDir(screenshotDir)
