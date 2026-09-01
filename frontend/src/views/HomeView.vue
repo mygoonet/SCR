@@ -276,9 +276,9 @@ function formatSec(sec) {
             <!-- статус -->
             <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-middle text-center">
               <template v-if="n.status">
-                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-black text-white border border-black whitespace-nowrap leading-none">Sign</span>
+                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-black text-white border border-black whitespace-nowrap leading-none">Sign</span>
                 <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-white text-red-700 border border-red-200 whitespace-nowrap leading-none">ошибка</span>
-                <span v-else class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-200 whitespace-nowrap leading-none">{{ n.status }}</span>
+                <span v-else class="inline-flex items-center justify-center h-[25px] sm:h-[25px] px-[15px] rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-200 whitespace-nowrap leading-none">{{ n.status }}</span>
               </template>
               <span v-if="n.error" class="block text-[11px] sm:text-xs text-red-700 leading-tight break-words [overflow-wrap:anywhere] mt-1">{{ n.error }}</span>
               <span v-if="!n.status && !n.error" class="text-gray-400 text-xs">—</span>
@@ -342,13 +342,14 @@ function formatSec(sec) {
       </div>
     </Teleport>
 
-    <footer class="mt-[3px] mb-[3px] flex justify-center gap-2 text-xs text-gray-500">
-      <a href="/legacy" class="text-black underline underline-offset-1 hover:text-gray-600">Legacy HTML</a>
-      <span>·</span>
-      <span>Обновление данных каждые 5 секунд</span>
-    </footer>
     </div>
   </div>
+
+  <footer class="w-full flex justify-center gap-2 text-xs text-gray-500 pt-[20px] pb-[40px]">
+    <a href="/legacy" class="text-black underline underline-offset-1 hover:text-gray-600">Legacy HTML</a>
+    <span>·</span>
+    <span>Обновление данных каждые 5 секунд</span>
+  </footer>
 </template>
 
 <style scoped>
