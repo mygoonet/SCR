@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useThemeStore } from '../stores/theme'
 
+const themeStore = useThemeStore()
 const notes = ref([])
 const status = ref(null)
 const loading = ref(true)
@@ -166,22 +168,26 @@ function formatSec(sec) {
 <template>
   <div>
     <!-- header full-width -->
-    <header class="border-b border-gray-200 pt-7 pb-5 bg-white sticky top-0 z-10">
+    <header class="border-b border-gray-200 dark:border-gray-800 pt-7 pb-5 bg-white dark:bg-gray-950 sticky top-0 z-10">
       <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="grid grid-cols-3 items-center gap-x-8 px-8 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-0.5">
-          <h1 class="text-lg sm:text-xl font-semibold tracking-tight text-black leading-tight">Накладные</h1>
+          <h1 class="text-lg sm:text-xl font-semibold tracking-tight text-black dark:text-white leading-tight">Накладные</h1>
           <p class="text-xs text-gray-400 leading-snug">Контур Логистика · автоматическое подписание</p>
         </div>
         <div class="self-center text-center">
-          <div class="inline-block border border-gray-200 rounded-lg px-3 py-2 bg-white">
-            <span class="block text-xl font-semibold leading-none text-black">{{ notes.length }}</span>
+          <div class="inline-block border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900">
+            <span class="block text-xl font-semibold leading-none text-black dark:text-white">{{ notes.length }}</span>
             <span class="text-[11px] uppercase tracking-widest text-gray-400">всего</span>
           </div>
         </div>
-        <div class="text-right">
-          <button @click="syncNow" class="sm:pl-12 pl-20 inline-flex items-center gap-1.5 text-xs text-gray-400 whitespace-nowrap min-w-[110px] hover:text-black cursor-pointer bg-transparent border-none p-0" :class="{ '!text-black': isUpdating }">
-            <span class="w-2 h-2 rounded-full flex-shrink-0 relative" :class="countdownPulse ? 'bg-black dot--pulse' : 'bg-gray-400'"></span>
+        <div class="text-right flex items-center justify-end gap-3">
+          <button @click="syncNow" class="sm:pl-12 pl-20 inline-flex items-center gap-1.5 text-xs text-gray-400 whitespace-nowrap min-w-[110px] hover:text-black dark:hover:text-white cursor-pointer bg-transparent border-none p-0" :class="{ '!text-black dark:!text-white': isUpdating }">
+            <span class="w-2 h-2 rounded-full flex-shrink-0 relative" :class="countdownPulse ? 'bg-black dark:bg-white dot--pulse' : 'bg-gray-400'"></span>
             <span :class="{ 'animate-countdown-pop': countdownPulse }">{{ countdown }}с</span>
+          </button>
+          <button @click="themeStore.toggle()" class="inline-flex items-center gap-1.5 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-xs cursor-pointer hover:border-black dark:hover:border-white"
+            :title="themeStore.theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'">
+            <span class="text-sm leading-none">{{ themeStore.theme === 'dark' ? '☀️' : '🌙' }}</span>
           </button>
         </div>
       </div>
@@ -190,48 +196,48 @@ function formatSec(sec) {
     <!-- content centered -->
     <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="pt-1 px-4 sm:px-6 lg:px-8 ">
     <!-- status bar - по центру как хедер, full width внутри контейнера -->
-    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch w-full bg-gray-50 border border-gray-200 rounded-lg overflow-hidden min-w-0 pb-0">
-      <div class="absolute inset-0 bg-gray-200 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
+    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden min-w-0 pb-0">
+      <div class="absolute inset-0 bg-gray-200 dark:bg-gray-700 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
       <div class="relative flex items-baseline gap-1.5 sm:gap-2 px-3 py-2 min-w-0">
         <span class="text-[10px] sm:text-[12px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap shrink-0 leading-none">last tic</span>
-        <span class="font-bold text-[10px] sm:text-[12px] text-black whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
+        <span class="font-bold text-[10px] sm:text-[12px] text-black dark:text-white whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
       </div>
       <div v-if="secondsSinceFetch != null" class="relative flex items-center justify-center px-3 sm:px-5 min-w-[66px] sm:min-w-[90px] shrink-0">
-        <span class="font-bold text-[10px] sm:text-[12px] text-black whitespace-nowrap tabular-nums leading-none">{{ formatSec(secondsSinceFetch) }}</span>
+        <span class="font-bold text-[10px] sm:text-[12px] text-black dark:text-white whitespace-nowrap tabular-nums leading-none">{{ formatSec(secondsSinceFetch) }}</span>
       </div>
-      <div v-if="status.lastFetchError" class="relative col-span-2 border-t border-red-200 bg-red-50 px-3 py-1.5 flex gap-2 items-baseline flex-wrap">
-        <span class="text-[10px] uppercase tracking-widest font-medium shrink-0" style="color:#991b1b">Ошибка</span>
-        <span class="text-xs sm:text-sm break-all" style="color:#991b1b">{{ status.lastFetchError }}</span>
+      <div v-if="status.lastFetchError" class="relative col-span-2 border-t border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 px-3 py-1.5 flex gap-2 items-baseline flex-wrap">
+        <span class="text-[10px] uppercase tracking-widest font-medium shrink-0 text-red-700 dark:text-red-400">Ошибка</span>
+        <span class="text-xs sm:text-sm break-all text-red-700 dark:text-red-400">{{ status.lastFetchError }}</span>
       </div>
     </div>
 
     <!-- errors -->
-    <div v-if="status?.signingFailures?.length" class="mt-3 border border-gray-200 border-l-[3px] border-l-black bg-gray-50 rounded-lg px-3.5 py-3">
-      <div class="text-xs font-semibold tracking-wide text-black mb-1.5">Критические ошибки · {{ status.signingFailures.length }}</div>
-      <ul class="ml-4 text-sm text-gray-600 space-y-0.5">
+    <div v-if="status?.signingFailures?.length" class="mt-3 border border-gray-200 dark:border-gray-800 border-l-[3px] border-l-black dark:border-l-white bg-gray-50 dark:bg-gray-900 rounded-lg px-3.5 py-3">
+      <div class="text-xs font-semibold tracking-wide text-black dark:text-white mb-1.5">Критические ошибки · {{ status.signingFailures.length }}</div>
+      <ul class="ml-4 text-sm text-gray-600 dark:text-gray-400 space-y-0.5">
         <li v-for="(e,i) in status.signingFailures" :key="i">{{ e }}</li>
       </ul>
     </div>
 
-    <div v-if="error" class="mt-3 border-l-[3px] border-l-red-500 bg-red-50 text-red-800 rounded-lg px-3.5 py-3">
+    <div v-if="error" class="mt-3 border-l-[3px] border-l-red-500 bg-red-50 dark:bg-red-950 text-red-800 dark:text-red-400 rounded-lg px-3.5 py-3">
       Ошибка загрузки: {{ error }}
     </div>
 
     <!-- toolbar -->
     <div class="pt-1 pb-[5px] flex items-center gap-6">
-      <input v-model="query" placeholder="Номер, отправитель, получатель, водитель, грузовик, статус…" class="flex-1 max-w-[420px] h-9 px-3 border border-gray-200 rounded-lg bg-white text-sm text-black outline-none placeholder:text-gray-400 focus:border-black focus:ring-1 focus:ring-black/5" />
+      <input v-model="query" placeholder="Номер, отправитель, получатель, водитель, грузовик, статус…" class="flex-1 max-w-[420px] h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-black dark:text-white outline-none placeholder:text-gray-400 focus:border-black dark:focus:border-white focus:ring-1 focus:ring-black/5" />
       <span class="text-xs text-gray-400">{{ filtered.length }} из {{ notes.length }}</span>
     </div>
 
     <!-- empty -->
-    <div v-if="!loading && !filtered.length" class="pt-6  border border-dashed border-gray-200 rounded-xl py-10 px-6 text-center bg-gray-50">
+    <div v-if="!loading && !filtered.length" class="pt-6  border border-dashed border-gray-200 dark:border-gray-800 rounded-xl py-10 px-6 text-center bg-gray-50 dark:bg-gray-900">
       <div class="text-2xl text-gray-400">—</div>
-      <div class="mt-2 font-semibold text-black">Нет данных</div>
+      <div class="mt-2 font-semibold text-black dark:text-white">Нет данных</div>
       <div class="mt-1 text-sm text-gray-500">Накладные появятся после следующего тикера</div>
     </div>
 
     <!-- table: адаптив без скрытия полей -->
-    <div v-else class="mt-0 pb-[10px] border border-gray-200 rounded-xl overflow-hidden sm:overflow-x-auto bg-white">
+    <div v-else class="mt-0 pb-[10px] border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden sm:overflow-x-auto bg-white dark:bg-gray-950">
       <table class="w-full table-fixed sm:table-auto border-collapse text-sm" >
         <colgroup>
           <col class="w-[28%] sm:w-auto" />
@@ -241,14 +247,14 @@ function formatSec(sec) {
         </colgroup>
         <thead>
           <tr>
-            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Номер / Дата</th>
-            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Маршрут</th>
-            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Статус</th>
-            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 border-b border-gray-200 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight">Pic</th>
+            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Номер / Дата</th>
+            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Маршрут</th>
+            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Статус</th>
+            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight">Pic</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="n in filtered" :key="n.number" class="border-b border-gray-100 last:border-none hover:bg-gray-50">
+          <tr v-for="n in filtered" :key="n.number" class="border-b border-gray-100 dark:border-gray-800 last:border-none hover:bg-gray-50 dark:hover:bg-gray-900">
             <!-- номер / дата -->
             <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-top">
               <div class="flex flex-col gap-0.5 min-w-0">
@@ -276,18 +282,18 @@ function formatSec(sec) {
             <!-- статус -->
             <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-middle text-center ">
               <template v-if="n.status">
-                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-black text-white border border-black whitespace-nowrap leading-none">Sign</span>
-                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-white text-red-700 border border-red-200 whitespace-nowrap leading-none">ошибка</span>
-                <span v-else class="inline-flex items-center justify-center h-[25px] sm:h-[25px] px-[15px] rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 text-gray-600 border border-gray-200 whitespace-nowrap leading-none">{{ n.status }}</span>
+                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-black dark:bg-white text-white dark:text-black border border-black dark:border-white whitespace-nowrap leading-none">Sign</span>
+                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[18px] sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-white dark:bg-gray-900 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900 whitespace-nowrap leading-none">ошибка</span>
+                <span v-else class="inline-flex items-center justify-center h-[25px] sm:h-[25px] px-[15px] rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 whitespace-nowrap leading-none">{{ n.status }}</span>
               </template>
-              <span v-if="n.error" class="block text-[11px] sm:text-xs text-red-700 leading-tight break-words [overflow-wrap:anywhere] mt-1">{{ n.error }}</span>
+              <span v-if="n.error" class="block text-[11px] sm:text-xs text-red-700 dark:text-red-400 leading-tight break-words [overflow-wrap:anywhere] mt-1">{{ n.error }}</span>
               <span v-if="!n.status && !n.error" class="text-gray-400 text-xs">—</span>
             </td>
             <!-- скриншоты -->
             <td class="px-1 sm:px-3 py-2 sm:py-2.5 align-middle text-center">
               <template v-if="n.shots?.length">
                 <div class="pt-[10px]">
-                  <button class="mx-auto block w-7 h-5 sm:w-9 sm:h-6 border border-gray-200 rounded overflow-hidden bg-gray-50 cursor-pointer p-0" @click="openCarousel(n,0)" :title="n.shots[0]">
+                  <button class="mx-auto block w-7 h-5 sm:w-9 sm:h-6 border border-gray-200 dark:border-gray-700 rounded overflow-hidden bg-gray-50 dark:bg-gray-900 cursor-pointer p-0" @click="openCarousel(n,0)" :title="n.shots[0]">
                     <img :src="`/screenshots/${n.number}/${n.shots[0]}`" loading="lazy" class="w-full h-full object-cover" />
                   </button>
                   <span v-if="n.shots.length > 1" class="block text-[10px] sm:text-xs text-gray-400 leading-none mt-0.5">+{{ n.shots.length - 1 }}</span>
@@ -304,13 +310,13 @@ function formatSec(sec) {
 
       <div class="pt-1" ></div>
 
-    <div v-if="status?.lastNotes?.length" class="mt-0  border border-gray-200 rounded-xl overflow-hidden bg-white">
-      <div class="flex justify-between items-baseline px-3.5 py-2.5 border-b border-gray-200 bg-gray-50">
-        <h3 class="text-sm font-semibold text-black">Последний тикер</h3>
+    <div v-if="status?.lastNotes?.length" class="mt-0  border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden bg-white dark:bg-gray-950">
+      <div class="flex justify-between items-baseline px-3.5 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
+        <h3 class="text-sm font-semibold text-black dark:text-white">Последний тикер</h3>
         <span class="text-gray-400 text-xs">{{ status.lastNotesCount }} накладных</span>
       </div>
       <div class="px-3.5 py-2">
-        <div v-for="n in status.lastNotes" :key="n.number" class="flex gap-3 py-1.5 border-b border-gray-100 last:border-none text-[12.5px] flex-wrap">
+        <div v-for="n in status.lastNotes" :key="n.number" class="flex gap-3 py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-none text-[12.5px] flex-wrap">
           <span class="font-semibold">{{ n.number }}</span>
           <span class="text-gray-400">от {{ n.date }}</span>
           <span>{{ n.consignor }} → {{ n.consignee }}</span>
@@ -322,19 +328,19 @@ function formatSec(sec) {
     <!-- carousel modal -->
     <Teleport to="body">
       <div v-if="showCarousel" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-6" @click.self="closeCarousel">
-        <div class="bg-white rounded-xl overflow-hidden w-[min(1100px,96vw)] max-h-[90vh] flex flex-col border border-gray-200">
-          <div class="flex items-center gap-3 px-3.5 py-2.5 border-b border-gray-200 bg-gray-50">
+        <div class="bg-white dark:bg-gray-950 rounded-xl overflow-hidden w-[min(1100px,96vw)] max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-800">
+          <div class="flex items-center gap-3 px-3.5 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
             <span class="font-mono font-semibold text-sm">{{ cNumber }} · {{ cIndex + 1 }} / {{ cShots.length }}</span>
             <span class="font-mono text-xs text-gray-400 truncate max-w-[40vw]">{{ cShots[cIndex] }}</span>
-            <button class="ml-auto w-7 h-7 rounded-lg border border-gray-200 bg-white cursor-pointer text-sm flex items-center justify-center hover:border-black" @click="closeCarousel">✕</button>
+            <button class="ml-auto w-7 h-7 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 cursor-pointer text-sm flex items-center justify-center hover:border-black dark:hover:border-white" @click="closeCarousel">✕</button>
           </div>
           <div class="relative bg-black flex items-center justify-center min-h-[320px] max-h-[62vh]">
             <button class="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full border border-white/30 bg-white/90 text-black text-xl cursor-pointer flex items-center justify-center" @click="prev" aria-label="prev">‹</button>
             <img :src="shotUrl(cShots[cIndex])" class="max-w-full max-h-[62vh] object-contain" />
             <button class="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full border border-white/30 bg-white/90 text-black text-xl cursor-pointer flex items-center justify-center" @click="next" aria-label="next">›</button>
           </div>
-          <div class="flex gap-2 px-3 py-2.5 overflow-x-auto bg-white border-t border-gray-200">
-            <button v-for="(s,i) in cShots" :key="s" class="flex-shrink-0 w-16 h-11 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-pointer p-0" :class="{ 'border-black ring-2 ring-black/10': i === cIndex }" @click="cIndex = i">
+          <div class="flex gap-2 px-3 py-2.5 overflow-x-auto bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800">
+            <button v-for="(s,i) in cShots" :key="s" class="flex-shrink-0 w-16 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 cursor-pointer p-0" :class="{ 'border-black ring-2 ring-black/10 dark:border-white dark:ring-white/20': i === cIndex }" @click="cIndex = i">
               <img :src="shotUrl(s)" loading="lazy" class="w-full h-full object-cover" />
             </button>
           </div>
@@ -346,7 +352,7 @@ function formatSec(sec) {
   </div>
 
   <footer class="w-full flex justify-center gap-2 text-xs text-gray-500 pt-[20px] pb-[40px]">
-    <a href="/legacy" class="text-black underline underline-offset-1 hover:text-gray-600">Legacy HTML</a>
+    <a href="/legacy" class="text-black dark:text-white underline underline-offset-1 hover:text-gray-600 dark:hover:text-gray-400">Legacy HTML</a>
     <span>·</span>
     <span>Обновление данных каждые 5 секунд</span>
   </footer>
@@ -365,7 +371,7 @@ function formatSec(sec) {
   position: absolute;
   inset: -6px;
   border-radius: inherit;
-  border: 1px solid #0a0a0a;
+  border: 1px solid var(--text);
   animation: dot-ping 0.85s cubic-bezier(0,0,0.2,1) infinite;
 }
 @keyframes dot-ping {
@@ -374,7 +380,7 @@ function formatSec(sec) {
 }
 @keyframes countdown-pop {
   0%   { transform: scale(1); }
-  40%  { transform: scale(1.5); color: #0a0a0a; }
+  40%  { transform: scale(1.5); color: var(--text); }
   100% { transform: scale(1); }
 }
 .animate-countdown-pop {

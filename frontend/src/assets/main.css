@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 @import './base.css';
 
+/* class-based dark mode: `dark:` variants activate when <html> has .dark */
+@custom-variant dark (&:where(.dark, .dark *));
+
 #app {
   min-height: 100vh;
 }
