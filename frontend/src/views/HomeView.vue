@@ -459,8 +459,12 @@ function formatSec(sec) {
   background-size: 100% 480px, 32px 32px, 32px 32px;
   --dash-grid: rgba(0, 0, 0, 0.045);
   --dash-glow: rgba(97, 93, 99, 0.10);
+  --dash-orb-a: rgba(124, 132, 255, 0.12);
+  --dash-orb-b: rgba(255, 168, 88, 0.09);
   --font-display: var(--font-display);
   --font-mono: var(--font-mono);
+  position: relative;
+  isolation: isolate;
   max-width: 1200px;
   margin: 0 auto;
   min-height: 100vh;
@@ -470,6 +474,40 @@ function formatSec(sec) {
 .dark .scr-dashboard {
   --dash-grid: rgba(255, 255, 255, 0.03);
   --dash-glow: rgba(196, 184, 216, 0.07);
+  --dash-orb-a: rgba(148, 138, 255, 0.11);
+  --dash-orb-b: rgba(255, 148, 92, 0.06);
+}
+
+/* Ambient glow orbs */
+.scr-dashboard::before,
+.scr-dashboard::after {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+}
+.scr-dashboard::before {
+  background: radial-gradient(560px 420px at 18% 92%, var(--dash-orb-a), transparent 70%);
+  animation: scr-orb-drift-a 26s ease-in-out infinite alternate;
+}
+.scr-dashboard::after {
+  background: radial-gradient(640px 480px at 82% 98%, var(--dash-orb-b), transparent 70%);
+  animation: scr-orb-drift-b 32s ease-in-out infinite alternate;
+}
+@keyframes scr-orb-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(4%, 6%, 0) scale(1.12); }
+}
+@keyframes scr-orb-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.08); }
+  to { transform: translate3d(-5%, -4%, 0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scr-dashboard::before,
+  .scr-dashboard::after {
+    animation: none;
+  }
 }
 
 /* ═══════════ HEADER ═══════════ */
@@ -626,7 +664,7 @@ function formatSec(sec) {
   border: 1px solid var(--m3-outlineVar);
   border-radius: 6px;
   overflow: hidden;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 .scr-status-bar__fill {
   position: absolute;
@@ -698,7 +736,7 @@ html:not(.dark) .scr-status-bar__error {
   background: var(--m3-surfaceContainer);
   border-radius: 6px;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 .scr-failures-header {
   display: flex;
@@ -733,7 +771,7 @@ html:not(.dark) .scr-status-bar__error {
   background: rgba(140, 29, 24, 0.15);
   border-radius: 6px;
   padding: 0.6rem 1rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
   font-size: 0.8rem;
   color: var(--m3-error);
 }
@@ -749,8 +787,7 @@ html:not(.dark) .scr-error-banner {
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.5rem 0;
-  margin-bottom: 0.1rem;
+  margin-bottom: 0.5rem;
 }
 .scr-search-wrap {
   position: relative;
