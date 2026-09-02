@@ -750,7 +750,7 @@ html:not(.dark) .scr-error-banner {
   align-items: center;
   gap: 1rem;
   padding: 0.5rem 0;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.1rem;
 }
 .scr-search-wrap {
   position: relative;
@@ -1405,10 +1405,17 @@ html:not(.dark) .scr-row--error td:first-child {
   .scr-carousel-overlay {
     padding: 0.5rem;
   }
+  .scr-carousel-content {
+    max-width: calc(100vw - 6rem);
+  }
   .scr-carousel-nav {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     font-size: 1.2rem;
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
   }
   .scr-carousel-nav--prev { left: 0.5rem; }
   .scr-carousel-nav--next { right: 0.5rem; }
