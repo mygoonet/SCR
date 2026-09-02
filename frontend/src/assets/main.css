@@ -12,3 +12,80 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/* ── M3 Dark Theme Tokens ─────────────────────────── */
+:root {
+  --font-display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+/* Light theme (fallback) */
+:root {
+  --m3-background: #fafafa;
+  --m3-onBackground: #0a0a0a;
+  --m3-surface: #f5f5f5;
+  --m3-surfaceDim: #ececec;
+  --m3-surfaceBright: #fafafa;
+  --m3-surfaceContainerLowest: #ffffff;
+  --m3-surfaceContainerLow: #f0f0f0;
+  --m3-surfaceContainer: #e8e8e8;
+  --m3-surfaceContainerHigh: #dedede;
+  --m3-surfaceContainerHighest: #d4d4d4;
+  --m3-onSurface: #0a0a0a;
+  --m3-onSurfaceVariant: #6b6b6b;
+  --m3-outline: #b0b0b0;
+  --m3-outlineVariant: #d4d4d4;
+  --m3-shadow: #000000;
+  --m3-inverseSurface: #0a0a0a;
+  --m3-inverseOnSurface: #fafafa;
+  --m3-primary: #615d63;
+  --m3-onPrimary: #d4c4e9;
+  --m3-primaryContainer: #bcb6bc;
+  --m3-onPrimaryContainer: #2d2a2f;
+  --m3-inversePrimary: #d4c4e9;
+  --m3-secondary: #7c757d;
+  --m3-onSecondary: #f5eff5;
+  --m3-secondaryContainer: #b0a8b0;
+  --m3-onSecondaryContainer: #322b32;
+}
+
+/* Dark theme — M3 exact tokens */
+.dark {
+  --m3-background: #0b0c15;
+  --m3-onBackground: #e0e0e0;
+  --m3-surface: #121320;
+  --m3-surfaceDim: #121320;
+  --m3-surfaceBright: #2a2b3c;
+  --m3-surfaceContainerLowest: #070810;
+  --m3-surfaceContainerLow: #0f0f1a;
+  --m3-surfaceContainer: #121320;
+  --m3-surfaceContainerHigh: #1e1f30;
+  --m3-surfaceContainerHighest: #2a2b3c;
+  --m3-onSurface: #e0e0e0;
+  --m3-onSurfaceVariant: #a0a1b0;
+  --m3-outline: #777785;
+  --m3-outlineVariant: #2a2b3c;
+  --m3-shadow: #000000;
+  --m3-inverseSurface: #e0e0e0;
+  --m3-inverseOnSurface: #0b0c15;
+  --m3-primary: #d4c4e9;
+  --m3-onPrimary: #322f34;
+  --m3-primaryContainer: #2d2a2f;
+  --m3-onPrimaryContainer: #bcb6bc;
+  --m3-inversePrimary: #615d63;
+  --m3-secondary: #c4b8d8;
+  --m3-onSecondary: #322f34;
+  --m3-secondaryContainer: #4a454c;
+  --m3-onSecondaryContainer: #e6def4;
+}
+
+body {
+  font-family: var(--font-display);
+  background-color: var(--m3-background);
+  color: var(--m3-onBackground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display { font-family: var(--font-display); }
+.font-mono { font-family: var(--font-mono); }

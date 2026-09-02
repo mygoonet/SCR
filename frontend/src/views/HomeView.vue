@@ -166,224 +166,1231 @@ function formatSec(sec) {
 </script>
 
 <template>
-  <div>
-    <!-- header full-width -->
-    <header class="border-b border-gray-200 dark:border-gray-800 pt-6 pb-4 bg-white dark:bg-gray-950 sticky top-0 z-10">
-      <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="grid grid-cols-3 items-center gap-x-8 px-6 sm:px-6 lg:px-8">
-        <div class="flex flex-col gap-1">
-          <h1 class="text-lg sm:text-xl font-semibold tracking-tight text-black dark:text-white leading-tight">Накладные</h1>
-          <p class="text-xs text-gray-400 leading-snug">Контур Логистика · автоматическое подписание</p>
+  <div class="scr-dashboard">
+    <!-- ═══════════ HEADER ═══════════ -->
+    <header class="scr-header">
+      <div class="scr-header-inner">
+        <div class="scr-header-brand">
+          <span class="scr-header-accent"></span>
+          <h1 class="scr-header-title">Накладные</h1>
+          <p class="scr-header-subtitle">Контур Логистика · автоподписание</p>
         </div>
-        <div class="self-center text-center">
-          <div class="inline-block border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900">
-            <span class="block text-xl font-semibold leading-none text-black dark:text-white">{{ notes.length }}</span>
-            <span class="text-[11px] uppercase tracking-widest text-gray-400">всего</span>
+        <div class="scr-header-stats">
+          <div class="scr-counter">
+            <span class="scr-counter-value">{{ notes.length }}</span>
+            <span class="scr-counter-label">всего</span>
           </div>
         </div>
-        <div class="text-right flex items-center justify-end gap-3">
-          <button @click="syncNow" class="sm:pl-12 pl-20 inline-flex items-center gap-1.5 text-xs text-gray-400 whitespace-nowrap min-w-[110px] hover:text-black dark:hover:text-white cursor-pointer bg-transparent border-none p-0" :class="{ '!text-black dark:!text-white': isUpdating }">
-            <span class="w-2 h-2 rounded-full flex-shrink-0 relative" :class="countdownPulse ? 'bg-black dark:bg-white dot--pulse' : 'bg-gray-400'"></span>
-            <span :class="{ 'animate-countdown-pop': countdownPulse }">{{ countdown }}с</span>
+        <div class="scr-header-actions">
+          <button @click="syncNow" class="scr-sync-btn" :class="{ 'scr-sync-btn--active': isUpdating }">
+            <span class="scr-sync-dot" :class="{ 'scr-sync-dot--pulse': countdownPulse, 'scr-sync-dot--urgent': countdown <= 2 && !countdownPulse }"></span>
+            <span class="scr-sync-text">{{ countdown }}с</span>
           </button>
-          <button @click="themeStore.toggle()" class="inline-flex items-center gap-1.5 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-xs cursor-pointer hover:border-black dark:hover:border-white"
-            :title="themeStore.theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'">
-            <span class="text-sm leading-none">{{ themeStore.theme === 'dark' ? '☀️' : '🌙' }}</span>
+          <button @click="themeStore.toggle()" class="scr-theme-btn" :title="themeStore.theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'">
+            {{ themeStore.theme === 'dark' ? '☀' : '☾' }}
           </button>
         </div>
       </div>
     </header>
 
-    <!-- content centered -->
-    <div style="width:100%;max-width:960px;margin-left:auto;margin-right:auto" class="pt-4 px-4 sm:px-6 lg:px-8 ">
-    <!-- status bar - по центру как хедер, full width внутри контейнера -->
-    <div v-if="status" class="mt-4 relative grid grid-cols-[1fr_auto] items-stretch w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden min-w-0 pb-0">
-      <div class="absolute inset-0 bg-gray-200 dark:bg-gray-700 transition-all duration-1000 pointer-events-none" :style="{ width: tickerProgress + '%' }"></div>
-      <div class="relative flex items-baseline gap-1.5 sm:gap-2 px-3 py-2 min-w-0">
-        <span class="text-[10px] sm:text-[12px] uppercase tracking-widest text-gray-400 font-medium whitespace-nowrap shrink-0 leading-none">last tic</span>
-        <span class="font-bold text-[10px] sm:text-[12px] text-black dark:text-white whitespace-nowrap tabular-nums leading-none">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
+    <!-- ═══════════ MAIN CONTENT ═══════════ -->
+    <main class="scr-main">
+      <!-- Status bar -->
+      <div v-if="status" class="scr-status-bar">
+        <div class="scr-status-bar__fill" :style="{ width: tickerProgress + '%' }"></div>
+        <div class="scr-status-bar__content">
+          <div class="scr-status-bar__cell">
+            <span class="scr-label">last tic</span>
+            <span class="scr-value font-mono">{{ splitDT(status.lastFetchTime).t || '—' }}</span>
+          </div>
+          <div class="scr-status-bar__cell scr-status-bar__cell--elapsed">
+            <span class="scr-label">elapsed</span>
+            <span class="scr-value font-mono">
+              {{ formatSec(secondsSinceFetch) }}
+            </span>
+          </div>
+        </div>
+        <div v-if="status.lastFetchError" class="scr-status-bar__error" style="grid-column: 1 / -1;">
+          <span class="scr-error-icon">✕</span>
+          <span>{{ status.lastFetchError }}</span>
+        </div>
       </div>
-      <div v-if="secondsSinceFetch != null" class="relative flex items-center justify-center px-3 sm:px-5 min-w-[66px] sm:min-w-[90px] shrink-0">
-        <span class="font-bold text-[10px] sm:text-[12px] text-black dark:text-white whitespace-nowrap tabular-nums leading-none">{{ formatSec(secondsSinceFetch) }}</span>
+
+      <!-- Signing failures -->
+      <div v-if="status?.signingFailures?.length" class="scr-failures">
+        <div class="scr-failures-header">
+          <span class="scr-failures-icon">⚠</span>
+          <span class="scr-failures-title">Критические ошибки · {{ status.signingFailures.length }}</span>
+        </div>
+        <ul class="scr-failures-list">
+          <li v-for="(e, i) in status.signingFailures" :key="i">{{ e }}</li>
+        </ul>
       </div>
-      <div v-if="status.lastFetchError" class="relative col-span-2 border-t border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 px-3 py-1.5 flex gap-2 items-baseline flex-wrap">
-        <span class="text-[10px] uppercase tracking-widest font-medium shrink-0 text-red-700 dark:text-red-400">Ошибка</span>
-        <span class="text-xs sm:text-sm break-all text-red-700 dark:text-red-400">{{ status.lastFetchError }}</span>
+
+      <!-- General error -->
+      <div v-if="error" class="scr-error-banner">
+        <span class="scr-error-icon">✕</span>
+        <span>Ошибка загрузки: {{ error }}</span>
       </div>
-    </div>
 
-    <!-- errors -->
-    <div v-if="status?.signingFailures?.length" class="mt-3 border border-gray-200 dark:border-gray-800 border-l-[3px] border-l-black dark:border-l-white bg-gray-50 dark:bg-gray-900 rounded-lg px-3.5 py-3">
-      <div class="text-xs font-semibold tracking-wide text-black dark:text-white mb-1.5">Критические ошибки · {{ status.signingFailures.length }}</div>
-      <ul class="ml-4 text-sm text-gray-600 dark:text-gray-400 space-y-0.5">
-        <li v-for="(e,i) in status.signingFailures" :key="i">{{ e }}</li>
-      </ul>
-    </div>
+      <!-- Search -->
+      <div class="scr-search-row">
+        <div class="scr-search-wrap">
+          <svg class="scr-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input
+            v-model="query"
+            placeholder="Номер, отправитель, получатель, водитель…"
+            class="scr-search-input"
+          />
+        </div>
+        <span class="scr-results-count">{{ filtered.length }} / {{ notes.length }}</span>
+      </div>
 
-    <div v-if="error" class="mt-3 border-l-[3px] border-l-red-500 bg-red-50 dark:bg-red-950 text-red-800 dark:text-red-400 rounded-lg px-3.5 py-3">
-      Ошибка загрузки: {{ error }}
-    </div>
+      <!-- Empty state -->
+      <div v-if="!loading && !filtered.length" class="scr-empty">
+        <div class="scr-empty-mark">∅</div>
+        <div class="scr-empty-title">Нет данных</div>
+        <div class="scr-empty-hint">Накладные появятся после следующего тикера</div>
+      </div>
 
-    <!-- toolbar -->
-    <div class="pt-2 pb-2 flex items-center gap-6">
-      <input v-model="query" placeholder="Номер, отправитель, получатель, водитель, грузовик, статус…" class="flex-1 max-w-[420px] h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-black dark:text-white outline-none placeholder:text-gray-400 focus:border-black dark:focus:border-white focus:ring-1 focus:ring-black/5" />
-      <span class="text-xs text-gray-400">{{ filtered.length }} из {{ notes.length }}</span>
-    </div>
+      <!-- Table -->
+      <div v-else class="scr-table-wrap">
+        <table class="scr-table">
+          <colgroup>
+            <col class="scr-col-number" />
+            <col class="scr-col-route" />
+            <col class="scr-col-status" />
+            <col class="scr-col-pic" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="scr-th">Номер / Дата</th>
+              <th class="scr-th">Маршрут</th>
+              <th class="scr-th">Статус</th>
+              <th class="scr-th">Pic</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(n, idx) in filtered"
+              :key="n.number"
+              class="scr-row"
+              :class="{ 'scr-row--error': n.status === 'failed' }"
+              :style="{ animationDelay: (idx * 40) + 'ms' }"
+            >
+              <!-- Number / Date -->
+              <td class="scr-td scr-td--number">
+                <div class="scr-row-number">
+                  <span class="scr-row-number__id font-mono">{{ n.number }}</span>
+                  <span class="scr-row-number__date">{{ n.date || '—' }}</span>
+                </div>
+                <div class="scr-row-meta">
+                  <span class="scr-meta-item">
+                    <span class="scr-meta-label">созд.</span>
+                    <span class="scr-meta-value font-mono">{{ splitDT(n.createdAt).t || '—' }}</span>
+                  </span>
+                  <span class="scr-meta-item">
+                    <span class="scr-meta-label">подп.</span>
+                    <span class="scr-meta-value font-mono">{{ splitDT(signedAt(n)).t || '—' }}</span>
+                  </span>
+                </div>
+              </td>
 
-    <!-- empty -->
-    <div v-if="!loading && !filtered.length" class="pt-6 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl py-8 px-6 text-center bg-gray-50 dark:bg-gray-900">
-      <div class="text-2xl text-gray-400">—</div>
-      <div class="mt-2 font-semibold text-black dark:text-white">Нет данных</div>
-      <div class="mt-1 text-sm text-gray-500">Накладные появятся после следующего тикера</div>
-    </div>
-
-    <!-- table: адаптив без скрытия полей -->
-    <div v-else class="mt-0 pb-[10px] border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden sm:overflow-x-auto bg-white dark:bg-gray-950">
-      <table class="w-full table-fixed sm:table-auto border-collapse text-sm" >
-        <colgroup>
-          <col class="w-[28%] sm:w-auto" />
-          <col class="w-[40%] sm:w-auto" />
-          <col class="w-[20%] sm:w-[110px]" />
-          <col class="w-[12%] sm:w-[64px]" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Номер / Дата</th>
-            <th class="text-left text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Маршрут</th>
-            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight whitespace-normal sm:whitespace-nowrap">Статус</th>
-            <th class="text-center text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-1.5 sm:px-3 py-2 sm:py-2.5 leading-tight">Pic</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="n in filtered" :key="n.number" class="border-b border-gray-100 dark:border-gray-800 last:border-none hover:bg-gray-50 dark:hover:bg-gray-900">
-            <!-- номер / дата -->
-            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-top">
-              <div class="flex flex-col gap-0.5 min-w-0">
-                <span class="font-mono font-semibold text-[13px] sm:text-sm leading-tight break-words [overflow-wrap:anywhere]">{{ n.number }}</span>
-                <span class="text-[11px] sm:text-xs text-gray-400 leading-tight break-words [overflow-wrap:anywhere]">{{ n.date || '—' }}</span>
-                <span class="text-[10px] sm:text-[11px] text-gray-400 flex gap-1 items-baseline leading-tight break-words [overflow-wrap:anywhere]"><span class="uppercase tracking-wide font-medium shrink-0">созд.</span> <span class="break-words [overflow-wrap:anywhere]">{{ splitDT(n.createdAt).t || '—' }}</span></span>
-                <span class="text-[10px] sm:text-[11px] text-gray-400 flex gap-1 items-baseline leading-tight break-words [overflow-wrap:anywhere]"><span class="uppercase tracking-wide font-medium shrink-0">подп.</span> <span class="break-words [overflow-wrap:anywhere]">{{ splitDT(signedAt(n)).t || '—' }}</span></span>
-              </div>
-            </td>
-            <!-- маршрут -->
-            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-top">
-              <div class="flex flex-col gap-0.5 leading-snug min-w-0">
-                <div class="text-[11px] sm:text-xs text-gray-400 leading-tight break-words [overflow-wrap:anywhere]">
+              <!-- Route -->
+              <td class="scr-td scr-td--route">
+                <div class="scr-route-driver">
                   <template v-if="n.driver || n.truck">
-                    <span v-if="n.driver" class="break-words [overflow-wrap:anywhere]">{{ n.driver }}</span>
-                    <span v-if="n.driver && n.truck"> · </span>
-                    <span v-if="n.truck" class="font-mono break-words [overflow-wrap:anywhere]">{{ n.truck }}</span>
+                    <span v-if="n.driver">{{ n.driver }}</span>
+                    <span v-if="n.driver && n.truck" class="scr-separator">·</span>
+                    <span v-if="n.truck" class="font-mono">{{ n.truck }}</span>
                   </template>
-                  <span v-else>—</span>
+                  <span v-else class="scr-dash">—</span>
                 </div>
-                <div class="text-[11px] sm:text-xs text-gray-400 leading-tight break-words [overflow-wrap:anywhere]"><span class="text-[10px] sm:text-[11px] uppercase tracking-wide font-medium">Приём:</span> <strong class="font-semibold break-words [overflow-wrap:anywhere]" :class="n.receptionAddress ? 'text-gray-600' : 'text-gray-400 font-normal'">{{ n.receptionAddress || '—' }}</strong></div>
-                <div class="text-[11px] sm:text-xs text-gray-400 leading-tight break-words [overflow-wrap:anywhere]"><span class="text-[10px] sm:text-[11px] uppercase tracking-wide font-medium">Доставка:</span> <strong class="font-semibold break-words [overflow-wrap:anywhere]" :class="n.deliveryAddress ? 'text-gray-600' : 'text-gray-400 font-normal'">{{ n.deliveryAddress || '—' }}</strong></div>
-              </div>
-            </td>
-            <!-- статус -->
-            <td class="px-1.5 sm:px-3 py-2 sm:py-2.5 align-middle text-center ">
-              <template v-if="n.status">
-                <span v-if="n.status === 'signed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-2 sm:px-2.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 whitespace-nowrap leading-none">Sign</span>
-                <span v-else-if="n.status === 'failed'" class="inline-flex items-center justify-center h-[28px] sm:h-5 px-2 sm:px-2.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 whitespace-nowrap leading-none">ошибка</span>
-                <span v-else class="inline-flex items-center justify-center h-[28px] sm:h-[28px] px-2 rounded-full text-[10px] sm:text-[11px] font-semibold bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 whitespace-nowrap leading-none">{{ n.status }}</span>
-              </template>
-              <span v-if="n.error" class="block text-[11px] sm:text-xs text-red-700 dark:text-red-400 leading-tight break-words [overflow-wrap:anywhere] mt-1">{{ n.error }}</span>
-              <span v-if="!n.status && !n.error" class="text-gray-400 text-xs">—</span>
-            </td>
-            <!-- скриншоты -->
-            <td class="px-1 sm:px-3 py-2 sm:py-2.5 align-middle text-center">
-              <template v-if="n.shots?.length">
-                <div class="pt-[10px] flex flex-col items-center gap-0.5">
-                  <button class="mx-auto block w-7 h-5 sm:w-9 sm:h-6 border border-gray-200 dark:border-gray-700 rounded overflow-hidden bg-gray-50 dark:bg-gray-900 cursor-pointer p-0" @click="openCarousel(n,0)" :title="n.shots[0]">
-                    <img :src="`/screenshots/${n.number}/${n.shots[0]}`" loading="lazy" class="w-full h-full object-cover" />
-                  </button>
-                  <span v-if="n.shots.length > 1" class="text-[10px] sm:text-xs text-gray-400 leading-none">{{ n.shots.length - 1 }}</span>
+                <div class="scr-route-address">
+                  <span class="scr-meta-label">Приём:</span>
+                  <strong :class="n.receptionAddress ? '' : 'scr-dash'">{{ n.receptionAddress || '—' }}</strong>
                 </div>
-              </template>
-              <span v-else class="text-gray-400 text-xs">—</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+                <div class="scr-route-address">
+                  <span class="scr-meta-label">Доставка:</span>
+                  <strong :class="n.deliveryAddress ? '' : 'scr-dash'">{{ n.deliveryAddress || '—' }}</strong>
+                </div>
+              </td>
 
-    <!-- ticker notes -->
+              <!-- Status -->
+              <td class="scr-td scr-td--status">
+                <template v-if="n.status">
+                  <span
+                    v-if="n.status === 'signed'"
+                    class="scr-badge scr-badge--signed"
+                  >Sign</span>
+                  <span
+                    v-else-if="n.status === 'failed'"
+                    class="scr-badge scr-badge--failed"
+                  >ошибка</span>
+                  <span
+                    v-else
+                    class="scr-badge scr-badge--pending"
+                  >{{ n.status }}</span>
+                </template>
+                <span v-if="n.error" class="scr-row-error">{{ n.error }}</span>
+                <span v-if="!n.status && !n.error" class="scr-dash">—</span>
+              </td>
 
-      <div class="pt-1" ></div>
-
-    <div v-if="status?.lastNotes?.length" class="mt-0  border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden bg-white dark:bg-gray-950">
-      <div class="flex justify-between items-baseline px-3.5 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-        <h3 class="text-sm font-semibold text-black dark:text-white">Последний тикер</h3>
-        <span class="text-gray-400 text-xs">{{ status.lastNotesCount }} накладных</span>
+              <!-- Screenshots -->
+              <td class="scr-td scr-td--pic">
+                <template v-if="n.shots?.length">
+                  <div class="scr-pic-wrap">
+                    <button
+                      class="scr-pic-thumb"
+                      @click="openCarousel(n, 0)"
+                      :title="n.shots[0]"
+                    >
+                      <img
+                        :src="`/screenshots/${n.number}/${n.shots[0]}`"
+                        loading="lazy"
+                        class="scr-pic-img"
+                      />
+                    </button>
+                    <span v-if="n.shots.length > 1" class="scr-pic-count">{{ n.shots.length - 1 }}</span>
+                  </div>
+                </template>
+                <span v-else class="scr-dash">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <div class="px-3.5 py-2">
-        <div v-for="n in status.lastNotes" :key="n.number" class="flex gap-3 py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-none text-[12.5px] flex-wrap">
-          <span class="font-semibold">{{ n.number }}</span>
-          <span class="text-gray-400">от {{ n.date }}</span>
-          <span>{{ n.consignor }} → {{ n.consignee }}</span>
-          <span class="text-gray-400">{{ n.carrier }}</span>
-        </div>
-      </div>
-    </div>
 
-    <!-- carousel modal -->
+      <!-- Last ticker notes -->
+      <div v-if="status?.lastNotes?.length" class="scr-ticker-section">
+        <details class="scr-ticker-details">
+          <summary class="scr-ticker-summary">
+            <span class="scr-ticker-summary__label">Последний тикер</span>
+            <span class="scr-ticker-summary__count">{{ status.lastNotesCount }} накладных</span>
+            <svg class="scr-ticker-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </summary>
+          <div class="scr-ticker-list">
+            <div v-for="n in status.lastNotes" :key="n.number" class="scr-ticker-item">
+              <span class="scr-ticker-item__number font-mono">{{ n.number }}</span>
+              <span class="scr-ticker-item__date">от {{ n.date }}</span>
+              <span class="scr-ticker-item__route">{{ n.consignor }} → {{ n.consignee }}</span>
+              <span class="scr-ticker-item__carrier">{{ n.carrier }}</span>
+            </div>
+          </div>
+        </details>
+      </div>
+    </main>
+
+    <!-- ═══════════ CAROUSEL OVERLAY ═══════════ -->
     <Teleport to="body">
-      <div v-if="showCarousel" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-6" @click.self="closeCarousel">
-        <div class="bg-white dark:bg-gray-950 rounded-xl overflow-hidden w-[min(1100px,96vw)] max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-800">
-          <div class="flex items-center gap-3 px-3.5 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-            <span class="font-mono font-semibold text-sm">{{ cNumber }} · {{ cIndex + 1 }} / {{ cShots.length }}</span>
-            <span class="font-mono text-xs text-gray-400 truncate max-w-[40vw]">{{ cShots[cIndex] }}</span>
-            <button class="ml-auto w-7 h-7 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 cursor-pointer text-sm flex items-center justify-center hover:border-black dark:hover:border-white" @click="closeCarousel">✕</button>
-          </div>
-          <div class="relative bg-black flex items-center justify-center min-h-[320px] max-h-[62vh]">
-            <button class="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border border-white/20 bg-black/40 text-white/80 text-sm cursor-pointer flex items-center justify-center hover:bg-black/60 hover:text-white" @click="prev" aria-label="prev">‹</button>
-            <img :src="shotUrl(cShots[cIndex])" class="max-w-full max-h-[62vh] object-contain" />
-            <button class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border border-white/20 bg-black/40 text-white/80 text-sm cursor-pointer flex items-center justify-center hover:bg-black/60 hover:text-white" @click="next" aria-label="next">›</button>
-          </div>
-          <div class="flex gap-2 px-3 py-2.5 overflow-x-auto bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800">
-            <button v-for="(s,i) in cShots" :key="s" class="flex-shrink-0 w-16 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 cursor-pointer p-0" :class="{ 'border-black ring-2 ring-black/10 dark:border-white dark:ring-white/20': i === cIndex }" @click="cIndex = i">
-              <img :src="shotUrl(s)" loading="lazy" class="w-full h-full object-cover" />
-            </button>
+      <Transition name="scr-carousel">
+        <div v-if="showCarousel" class="scr-carousel-overlay" @click.self="closeCarousel">
+          <div class="scr-carousel-vignette"></div>
+          <button class="scr-carousel-close" @click="closeCarousel">✕</button>
+          <button class="scr-carousel-nav scr-carousel-nav--prev" @click="prev">‹</button>
+          <button class="scr-carousel-nav scr-carousel-nav--next" @click="next">›</button>
+          <div class="scr-carousel-content">
+            <div class="scr-carousel-header">
+              <span class="scr-carousel-number font-mono">{{ cNumber }}</span>
+              <span class="scr-carousel-counter">{{ cIndex + 1 }} / {{ cShots.length }}</span>
+              <span class="scr-carousel-filename font-mono truncate">{{ cShots[cIndex] }}</span>
+            </div>
+            <div class="scr-carousel-image-wrap">
+              <img :src="shotUrl(cShots[cIndex])" class="scr-carousel-img" />
+            </div>
+            <div class="scr-carousel-thumbs">
+              <button
+                v-for="(s, i) in cShots"
+                :key="s"
+                class="scr-carousel-thumb"
+                :class="{ 'scr-carousel-thumb--active': i === cIndex }"
+                @click="cIndex = i"
+              >
+                <img :src="shotUrl(s)" loading="lazy" class="scr-carousel-thumb-img" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
 
-    </div>
+    <!-- Footer -->
+    <footer class="scr-footer">
+      <a href="/legacy" class="scr-footer-link">Legacy HTML</a>
+      <span class="scr-footer-sep">·</span>
+      <span>Обновление каждые 5 секунд</span>
+    </footer>
   </div>
-
-  <footer class="w-full flex justify-center gap-2 text-xs text-gray-500 pt-5 pb-10">
-    <a href="/legacy" class="text-black dark:text-white underline underline-offset-1 hover:text-gray-600 dark:hover:text-gray-400">Legacy HTML</a>
-    <span>·</span>
-    <span>Обновление данных каждые 5 секунд</span>
-  </footer>
 </template>
 
 <style scoped>
-@keyframes dot-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+/* ── CSS Variables (scoped) ─────────────────────────── */
+.scr-dashboard {
+  --m3-bg: var(--m3-background);
+  --m3-surface: var(--m3-surfaceContainer);
+  --m3-surfaceLow: var(--m3-surfaceContainerLow);
+  --m3-surfaceHigh: var(--m3-surfaceContainerHigh);
+  --m3-surfaceHighest: var(--m3-surfaceContainerHighest);
+  --m3-onBg: var(--m3-onBackground);
+  --m3-onSurface: var(--m3-onSurface);
+  --m3-onSurfaceVar: var(--m3-onSurfaceVariant);
+  --m3-outline: var(--m3-outline);
+  --m3-outlineVar: var(--m3-outlineVariant);
+  --m3-primary: var(--m3-primary);
+  --m3-onPrimary: var(--m3-onPrimary);
+  --m3-primaryContainer: var(--m3-primaryContainer);
+  --m3-inverseSurface: var(--m3-inverseSurface);
+  --m3-inverseOnSurface: var(--m3-inverseOnSurface);
+  --m3-inversePrimary: var(--m3-inversePrimary);
+  --m3-error: #f2b8b5;
+  --m3-errorContainer: #8c1d18;
+  --m3-warning: #f2cc8f;
+  --m3-success: #aed581;
+  background: var(--m3-bg);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
-.animate-dot-blink {
-  animation: dot-blink 0.7s step-end infinite;
+
+/* ═══════════ HEADER ═══════════ */
+.scr-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--m3-bg);
+  border-bottom: 1px solid var(--m3-outlineVar);
 }
-.dot--pulse::after {
+.scr-header-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+}
+.scr-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.scr-header-accent {
+  width: 3px;
+  height: 28px;
+  background: var(--m3-onBg);
+  flex-shrink: 0;
+}
+.scr-header-title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--m3-onBg);
+  line-height: 1;
+}
+.scr-header-subtitle {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--m3-onSurfaceVar);
+  margin-top: 0.15rem;
+}
+.scr-header-stats {
+  display: flex;
+  justify-content: center;
+}
+.scr-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.4rem 1.25rem;
+  background: var(--m3-surfaceLow);
+  border: 1px solid var(--m3-outlineVar);
+}
+.scr-counter-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--m3-onBg);
+  line-height: 1;
+}
+.scr-counter-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--m3-onSurfaceVar);
+  margin-top: 0.2rem;
+}
+.scr-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Sync button */
+.scr-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  color: var(--m3-onSurfaceVar);
+  transition: color 0.15s ease;
+}
+.scr-sync-btn:hover {
+  color: var(--m3-onBg);
+}
+.scr-sync-btn--active {
+  color: var(--m3-onBg);
+}
+.scr-sync-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--m3-onSurfaceVar);
+  flex-shrink: 0;
+  position: relative;
+}
+.scr-sync-dot--pulse::after {
   content: '';
   position: absolute;
-  inset: -6px;
-  border-radius: inherit;
-  border: 1px solid var(--text);
-  animation: dot-ping 0.85s cubic-bezier(0,0,0.2,1) infinite;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  animation: scr-dot-ping 0.85s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
-@keyframes dot-ping {
+.scr-sync-dot--urgent {
+  background: var(--m3-error);
+  animation: scr-dot-blink 0.7s step-end infinite;
+}
+.scr-sync-text {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Theme button */
+.scr-theme-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--m3-surfaceLow);
+  border: 1px solid var(--m3-outlineVar);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--m3-onSurfaceVar);
+  transition: all 0.15s ease;
+}
+.scr-theme-btn:hover {
+  border-color: var(--m3-onBg);
+  color: var(--m3-onBg);
+}
+
+/* ═══════════ MAIN ═══════════ */
+.scr-main {
+  flex: 1;
+  padding: 1rem 1.5rem 2rem;
+}
+
+/* ── Status bar ── */
+.scr-status-bar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  background: var(--m3-surfaceContainer);
+  border: 1px solid var(--m3-outlineVar);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+.scr-status-bar__fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 0%;
+  min-width: 0;
+  background: var(--m3-secondary);
+  transition: width 1s linear;
+  pointer-events: none;
+}
+.scr-status-bar__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 2rem;
+  padding: 0.5rem 1rem;
+  flex: 1;
+  min-width: 0;
+}
+.scr-status-bar__cell {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.scr-status-bar__cell--elapsed {
+  padding-left: 1rem;
+  border-left: 1px solid var(--m3-outlineVar);
+}
+.scr-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--m3-onSurfaceVar);
+  font-weight: 500;
+}
+.scr-value {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--m3-onBg);
+  font-variant-numeric: tabular-nums;
+}
+
+.scr-status-bar__error {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  border-top: 1px solid var(--m3-outlineVar);
+  background: rgba(140, 29, 24, 0.15);
+  color: var(--m3-error);
+  font-size: 0.75rem;
+}
+
+html:not(.dark) .scr-status-bar__error {
+  color: #b3261e !important;
+  background: rgba(140, 29, 24, 0.08) !important;
+}
+
+/* ── Failures ── */
+.scr-failures {
+  border: 1px solid var(--m3-outlineVar);
+  border-left: 3px solid var(--m3-error);
+  background: var(--m3-surfaceContainer);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.scr-failures-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--m3-onBg);
+  margin-bottom: 0.35rem;
+}
+.scr-failures-icon {
+  color: var(--m3-error);
+}
+.scr-failures-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.8rem;
+  color: var(--m3-onSurfaceVar);
+  line-height: 1.6;
+}
+.scr-failures-list li {
+  margin-bottom: 0.1rem;
+}
+
+/* ── Error banner ── */
+.scr-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--m3-outlineVar);
+  border-left: 3px solid var(--m3-error);
+  background: rgba(140, 29, 24, 0.15);
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--m3-error);
+}
+
+html:not(.dark) .scr-error-banner {
+  color: #b3261e !important;
+  background: rgba(140, 29, 24, 0.08) !important;
+  border-left-color: #b3261e !important;
+}
+
+/* ── Search ── */
+.scr-search-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  margin-bottom: 0.25rem;
+}
+.scr-search-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 480px;
+}
+.scr-search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--m3-onSurfaceVar);
+  pointer-events: none;
+}
+.scr-search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 0.75rem 0 2rem;
+  background: var(--m3-surfaceLow);
+  border: 1px solid var(--m3-outlineVar);
+  border-radius: 6px;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  color: var(--m3-onBg);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.scr-search-input::placeholder {
+  color: var(--m3-onSurfaceVar);
+}
+.scr-search-input:focus {
+  border-color: var(--m3-onBg);
+}
+.scr-results-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--m3-onSurfaceVar);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Empty state ── */
+.scr-empty {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  border: 1px dashed var(--m3-outlineVar);
+  border-radius: 8px;
+  background: var(--m3-surfaceLow);
+}
+.scr-empty-mark {
+  font-size: 2.5rem;
+  color: var(--m3-onSurfaceVar);
+  line-height: 1;
+}
+.scr-empty-title {
+  margin-top: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--m3-onBg);
+}
+.scr-empty-hint {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--m3-onSurfaceVar);
+}
+
+/* ── Table ── */
+.scr-table-wrap {
+  border: 1px solid var(--m3-outlineVar);
+  border-radius: 8px;
+  overflow-x: auto;
+  background: var(--m3-bg);
+}
+.scr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.scr-col-number { width: 28%; }
+.scr-col-route { width: 40%; }
+.scr-col-status { width: 20%; }
+.scr-col-pic { width: 12%; }
+
+.scr-th {
+  text-align: left;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--m3-onSurfaceVar);
+  background: var(--m3-surfaceLow);
+  border-bottom: 1px solid var(--m3-outlineVar);
+  padding: 0.6rem 0.75rem;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.scr-table tbody tr {
+  border-bottom: 1px solid var(--m3-outlineVar);
+  transition: background-color 0.15s ease-out;
+  animation: scr-row-in 0.4s ease-out both;
+}
+.scr-table tbody tr:last-child {
+  border-bottom: none;
+}
+.scr-table tbody tr:hover {
+  background: var(--m3-surfaceLow);
+}
+.scr-td {
+  padding: 0.6rem 0.75rem;
+  vertical-align: top;
+  color: var(--m3-onBg);
+}
+.scr-td--pic {
+  padding: 0.6rem 0.75rem;
+  vertical-align: middle !important;
+  text-align: center;
+}
+.scr-td--status {
+  vertical-align: middle !important;
+}
+.scr-td--number {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.scr-row-number {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.scr-row-number__id {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--m3-onBg);
+  word-break: break-all;
+}
+.scr-row-number__date {
+  font-size: 0.7rem;
+  color: var(--m3-onSurfaceVar);
+  word-break: break-all;
+}
+.scr-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.scr-meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+}
+.scr-meta-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  color: var(--m3-onSurfaceVar);
+}
+.scr-meta-value {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--m3-onSurfaceVar);
+  word-break: break-all;
+}
+
+/* Route */
+.scr-route-driver {
+  font-size: 0.7rem;
+  color: var(--m3-onSurfaceVar);
+  word-break: break-all;
+}
+.scr-separator {
+  color: var(--m3-onSurfaceVar);
+}
+.scr-route-address {
+  font-size: 0.7rem;
+  color: var(--m3-onSurfaceVar);
+  word-break: break-all;
+}
+.scr-dash {
+  color: var(--m3-onSurfaceVar) !important;
+  font-weight: 400 !important;
+}
+
+/* Status badges */
+.scr-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.scr-badge--signed {
+  background: var(--m3-surfaceHigh);
+  color: var(--m3-onSurfaceVar);
+  border: 1px solid var(--m3-outlineVar);
+}
+.scr-badge--failed {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--m3-error);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+.scr-badge--pending {
+  background: var(--m3-surfaceLow);
+  color: var(--m3-onSurfaceVar);
+  border: 1px solid var(--m3-outlineVar);
+}
+.scr-row-error {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--m3-error);
+  margin-top: 0.25rem;
+  word-break: break-all;
+}
+
+html:not(.dark) .scr-row-error {
+  color: #b3261e !important;
+}
+
+/* Pic column */
+.scr-pic-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  width: fit-content;
+  margin: 0 auto;
+}
+.scr-pic-thumb {
+  width: 36px;
+  height: 24px;
+  border: 1px solid var(--m3-outlineVar);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--m3-surfaceLow);
+  cursor: pointer;
+  padding: 0;
+}
+.scr-pic-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.scr-pic-count {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--m3-onSurfaceVar);
+}
+
+/* Row error accent */
+.scr-row--error td:first-child {
+  border-left: 2px solid var(--m3-error);
+}
+
+/* ── Light theme: make red elements readable ── */
+html:not(.dark) .scr-sync-dot--urgent,
+html:not(.dark) .scr-status-bar__error,
+html:not(.dark) .scr-error-banner,
+html:not(.dark) .scr-failures,
+html:not(.dark) .scr-failures-icon,
+html:not(.dark) .scr-badge--failed,
+html:not(.dark) .scr-row-error {
+  color: #b3261e !important;
+}
+html:not(.dark) .scr-sync-dot--urgent {
+  background: #b3261e !important;
+}
+html:not(.dark) .scr-failures,
+html:not(.dark) .scr-failures-icon,
+html:not(.dark) .scr-error-banner {
+  border-left-color: #b3261e !important;
+}
+html:not(.dark) .scr-row--error td:first-child {
+  border-left-color: #b3261e !important;
+}
+
+/* ═══════════ TICKER SECTION ═══════════ */
+.scr-ticker-section {
+  margin-top: 0.5rem;
+}
+.scr-ticker-details {
+  border: 1px solid var(--m3-outlineVar);
+  border-radius: 6px;
+  background: var(--m3-bg);
+  overflow: hidden;
+}
+.scr-ticker-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--m3-surfaceLow);
+  border-bottom: 1px solid var(--m3-outlineVar);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.scr-ticker-summary::-webkit-details-marker {
+  display: none;
+}
+.scr-ticker-summary__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--m3-onBg);
+}
+.scr-ticker-summary__count {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--m3-onSurfaceVar);
+}
+.scr-ticker-chevron {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--m3-onSurfaceVar);
+  transition: transform 0.2s ease;
+}
+.scr-ticker-details[open] .scr-ticker-chevron {
+  transform: rotate(180deg);
+}
+.scr-ticker-list {
+  padding: 0.5rem 1rem;
+}
+.scr-ticker-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--m3-outlineVar);
+  font-size: 0.7rem;
+  color: var(--m3-onSurfaceVar);
+}
+.scr-ticker-item:last-child {
+  border-bottom: none;
+}
+.scr-ticker-item__number {
+  font-weight: 600;
+  color: var(--m3-onBg);
+}
+.scr-ticker-item__date {
+  color: var(--m3-onSurfaceVar);
+}
+.scr-ticker-item__route {
+  color: var(--m3-onSurfaceVar);
+}
+.scr-ticker-item__carrier {
+  color: var(--m3-onSurfaceVar);
+}
+
+/* ═══════════ CAROUSEL ═══════════ */
+.scr-carousel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  padding: 2rem;
+}
+.scr-carousel-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%);
+}
+.scr-carousel-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.scr-carousel-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.scr-carousel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.scr-carousel-nav:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+.scr-carousel-nav--prev { left: 1.5rem; }
+.scr-carousel-nav--next { right: 1.5rem; }
+
+.scr-carousel-content {
+  position: relative;
+  z-index: 1;
+  max-width: min(1100px, 94vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--m3-bg);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--m3-outlineVar);
+}
+.scr-carousel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--m3-outlineVar);
+  background: var(--m3-surfaceLow);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.scr-carousel-number {
+  font-weight: 600;
+  color: var(--m3-onBg);
+}
+.scr-carousel-counter {
+  color: var(--m3-onSurfaceVar);
+}
+.scr-carousel-filename {
+  margin-left: auto;
+  color: var(--m3-onSurfaceVar);
+  font-size: 0.65rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scr-carousel-image-wrap {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  max-height: 60vh;
+}
+.scr-carousel-img {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+.scr-carousel-thumbs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--m3-outlineVar);
+  background: var(--m3-bg);
+}
+.scr-carousel-thumb {
+  flex-shrink: 0;
+  width: 64px;
+  height: 44px;
+  border: 1px solid var(--m3-outlineVar);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+  opacity: 0.5;
+}
+.scr-carousel-thumb--active {
+  border-color: var(--m3-onBg);
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+.dark .scr-carousel-thumb--active {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15);
+}
+.scr-carousel-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Carousel transitions */
+.scr-carousel-enter-active {
+  animation: scr-carousel-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scr-carousel-leave-active {
+  animation: scr-carousel-out 0.2s ease-in;
+}
+@keyframes scr-carousel-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes scr-carousel-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+/* ═══════════ FOOTER ═══════════ */
+.scr-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.5rem 1rem 2rem;
+  font-size: 0.7rem;
+  color: var(--m3-onSurfaceVar);
+}
+.scr-footer-link {
+  color: var(--m3-onSurfaceVar);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+.scr-footer-link:hover {
+  color: var(--m3-onBg);
+}
+.scr-footer-sep {
+  color: var(--m3-outlineVar);
+}
+
+/* ═══════════ ANIMATIONS ═══════════ */
+@keyframes scr-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes scr-dot-ping {
   0% { transform: scale(1); opacity: 0.45; }
   100% { transform: scale(2.4); opacity: 0; }
 }
-@keyframes countdown-pop {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(1.5); color: var(--text); }
-  100% { transform: scale(1); }
+@keyframes scr-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
-.animate-countdown-pop {
-  animation: countdown-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+
+/* ═══════════ RESPONSIVE ═══════════ */
+@media (max-width: 768px) {
+  .scr-header-inner {
+    grid-template-columns: auto 1fr auto;
+    gap: 0.3rem;
+    padding: 0.4rem 0.75rem;
+  }
+  .scr-header-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .scr-header-accent {
+    display: none;
+  }
+  .scr-header-title {
+    font-size: 0.9rem;
+  }
+  .scr-header-subtitle {
+    font-size: 0.4rem;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+  }
+  .scr-header-accent {
+    width: 2px;
+    height: 14px;
+    align-self: flex-start;
+    margin-top: 0.1rem;
+  }
+  .scr-header-stats {
+    justify-self: center;
+  }
+  .scr-header-actions {
+    justify-self: end;
+  }
+  .scr-counter {
+    padding: 0.2rem 0.6rem;
+  }
+  .scr-counter-value {
+    font-size: 1rem;
+  }
+  .scr-counter-label {
+    font-size: 0.45rem;
+  }
+  .scr-sync-text {
+    font-size: 0.6rem;
+  }
+  .scr-theme-btn {
+    width: 26px;
+    height: 26px;
+    font-size: 0.75rem;
+  }
+  .scr-header-actions {
+    gap: 0.3rem;
+  }
+  .scr-main {
+    padding: 0.75rem 0.75rem 1.5rem;
+  }
+  .scr-status-bar__content {
+    display: flex !important;
+    justify-content: space-between;
+    padding: 0.3rem 0.75rem;
+  }
+  .scr-status-bar__cell {
+    font-size: 0.65rem;
+  }
+  .scr-status-bar__cell--elapsed {
+    text-align: right;
+    border-left: 1px solid var(--m3-outlineVar);
+    padding-left: 1rem;
+  }
+  .scr-label {
+    font-size: 0.5rem;
+  }
+  .scr-value {
+    font-size: 0.7rem;
+  }
+  .scr-carousel-overlay {
+    padding: 0.5rem;
+  }
+  .scr-carousel-nav {
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
+  }
+  .scr-carousel-nav--prev { left: 0.5rem; }
+  .scr-carousel-nav--next { right: 0.5rem; }
 }
 </style>
