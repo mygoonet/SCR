@@ -270,7 +270,7 @@ function formatSec(sec) {
               <th class="scr-th">Номер / Дата</th>
               <th class="scr-th">Маршрут</th>
               <th class="scr-th">Статус</th>
-              <th class="scr-th">Pic</th>
+              <th class="scr-th scr-th--pic">Pic</th>
             </tr>
           </thead>
           <tbody>
@@ -839,6 +839,9 @@ html:not(.dark) .scr-error-banner {
 .scr-col-route { width: 40%; }
 .scr-col-status { width: 20%; }
 .scr-col-pic { width: 12%; }
+.scr-th.scr-th--pic {
+  text-align: center;
+}
 
 .scr-th {
   text-align: left;
