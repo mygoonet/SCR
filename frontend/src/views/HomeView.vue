@@ -515,7 +515,9 @@ function formatSec(sec) {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--m3-bg);
+  background: color-mix(in srgb, var(--m3-bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--m3-outlineVar);
 }
 .scr-header-inner {
