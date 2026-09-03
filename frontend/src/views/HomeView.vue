@@ -70,6 +70,13 @@ function signedAt(n) {
   return n.processedAt || '—'
 }
 
+// Поисковые подписи статусов: сырое значение + то, что видно в таблице (Sign/ошибка) + естественные русские синонимы
+const STATUS_LABELS = {
+  signed: 'sign подписана',
+  failed: 'ошибка error',
+  in_progress: 'в работе прогресс'
+}
+
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) return notes.value
@@ -80,7 +87,10 @@ const filtered = computed(() => {
     (n.deliveryAddress && n.deliveryAddress.toLowerCase().includes(q)) ||
     (n.driver && n.driver.toLowerCase().includes(q)) ||
     (n.truck && n.truck.toLowerCase().includes(q)) ||
-    (n.status && n.status.toLowerCase().includes(q))
+    (n.status && (
+      n.status.toLowerCase().includes(q) ||
+      (STATUS_LABELS[n.status] && STATUS_LABELS[n.status].includes(q))
+    ))
   )
 })
 
@@ -1369,11 +1379,12 @@ html:not(.dark) .scr-row--error td:first-child {
   .scr-header-inner {
     grid-template-columns: auto 1fr auto;
     gap: 0.3rem;
-    padding: 0.4rem 0.75rem;
+    padding: 0.5rem 1rem;
   }
   .scr-header-brand {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 0.15rem;
   }
   .scr-header-accent {
@@ -1420,7 +1431,7 @@ html:not(.dark) .scr-row--error td:first-child {
     gap: 0.3rem;
   }
   .scr-main {
-    padding: 0.75rem 0.75rem 1.5rem;
+    padding: 0.75rem 1rem 1.5rem;
   }
   .scr-status-bar__content {
     display: flex !important;
