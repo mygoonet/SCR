@@ -682,32 +682,56 @@ function formatSec(sec) {
   position: absolute;
   bottom: 0;
   left: 0;
-  height: 3px;
+  height: 2px;
   width: 0%;
   min-width: 0;
   background: var(--m3-secondary);
+  /* static glow: tight + wide upward halo (parent .scr-status-bar has overflow: hidden) */
   box-shadow:
-    0 0 5px 1px var(--m3-secondary),
-    0 -2px 24px 3px color-mix(in srgb, var(--m3-secondary) 75%, transparent);
+    0 0 12px 1px var(--m3-secondary),
+    0 -2px 26px 4px color-mix(in srgb, var(--m3-secondary) 10%, transparent);
   transition: width 1s linear;
-  animation: scr-status-glow-pulse 2.4s ease-in-out infinite;
+  /* NO overflow:hidden here: it would clip the wave's glow into a 2px sliver.
+     The parent .scr-status-bar (overflow: hidden) still bounds everything to the bar. */
   pointer-events: none;
 }
-@keyframes scr-status-glow-pulse {
-  0%, 100% {
-    box-shadow:
-      0 0 3px 1px color-mix(in srgb, var(--m3-secondary) 55%, transparent),
-      0 -2px 14px 2px color-mix(in srgb, var(--m3-secondary) 35%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 6px 1px var(--m3-secondary),
-      0 -2px 24px 3px color-mix(in srgb, var(--m3-secondary) 75%, transparent);
-  }
+/* running wave sliding along the progress line (theme-aware, no hardcoded colors).
+   Near-white core for contrast against the secondary line; fades in/out at the ends
+   so it doesn't pop when wrapping past the line edges. */
+.scr-status-bar__fill::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 5%;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--m3-secondary) 20%, white),
+    #fff,
+    color-mix(in srgb, var(--m3-secondary) 20%, white),
+    transparent
+  );
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--m3-secondary) 60%, white),
+    0 0 20px color-mix(in srgb, var(--m3-secondary) 50%, transparent);
+  animation: scr-status-running-wave 5s linear infinite;
+}
+@keyframes scr-status-running-wave {
+  /* `left` must be specified in EVERY keyframe — unspecified stops fall back to the
+     base value (-40%) and the wave would sit still for most of the cycle. */
+  0%   { left: -40%; opacity: 0; }
+  15%  { left: -16%; opacity: 1; }
+  85%  { left: 84%;  opacity: 1; }
+  100% { left: 100%; opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .scr-status-bar__fill {
+  .scr-status-bar__fill::before {
     animation: none;
+    /* without the animation the wave would sit at left:-40%, off the line, and be visible */
+    opacity: 0;
   }
 }
 .scr-status-bar__content {
