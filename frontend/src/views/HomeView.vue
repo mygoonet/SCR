@@ -683,7 +683,7 @@ function formatSec(sec) {
   bottom: 0;
   left: 0;
   height: 2px;
-  width: 0%;
+  width: 12%;
   min-width: 0;
   background: var(--m3-secondary);
   /* static glow: tight + wide upward halo (parent .scr-status-bar has overflow: hidden) */
@@ -703,7 +703,7 @@ function formatSec(sec) {
   position: absolute;
   top: 0;
   left: -40%;
-  width: 5%;
+  width: 2%;
   height: 100%;
   border-radius: 2px;
   background: linear-gradient(
