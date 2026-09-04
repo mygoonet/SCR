@@ -686,8 +686,29 @@ function formatSec(sec) {
   width: 0%;
   min-width: 0;
   background: var(--m3-secondary);
+  box-shadow:
+    0 0 5px 1px var(--m3-secondary),
+    0 -2px 24px 3px color-mix(in srgb, var(--m3-secondary) 75%, transparent);
   transition: width 1s linear;
+  animation: scr-status-glow-pulse 2.4s ease-in-out infinite;
   pointer-events: none;
+}
+@keyframes scr-status-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 3px 1px color-mix(in srgb, var(--m3-secondary) 55%, transparent),
+      0 -2px 14px 2px color-mix(in srgb, var(--m3-secondary) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 6px 1px var(--m3-secondary),
+      0 -2px 24px 3px color-mix(in srgb, var(--m3-secondary) 75%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scr-status-bar__fill {
+    animation: none;
+  }
 }
 .scr-status-bar__content {
   position: relative;
