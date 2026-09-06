@@ -1,6 +1,6 @@
 ---
 name: git
-description: Git commit/push для SCRP. Использовать при запросах "commit", "push", "закоммить", "запушить". Правила: только tracked-изменения, untracked никогда, commit message на английском, ветка master. Выполнять в FORK, чтобы не тратить токены основной сессии.
+description: "Git commit/push для SCRP. Использовать при запросах 'commit', 'push', 'закоммить', 'запушить'. Правила: только tracked-изменения, untracked никогда, commit message на английском, ветка master. Выполнять в FORK, чтобы не тратить токены основной сессии."
 ---
 
 # Git SCRP
