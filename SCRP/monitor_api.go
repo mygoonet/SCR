@@ -361,11 +361,13 @@ func reloadNotesAPI(ctx context.Context, cs *captureState) error {
 
 // FetchNotesAPI получает список накладных, перехватив ответ SPA.
 // timeoutSec — сколько секунд ждём появления/тела ответа.
-// Общий таймаут = timeoutSec + 30с на каждую попытку (запас на reload+навигацию waybill+GetResponseBody),
-// ретрай на свежем контексте иначе вторая попытка ловит deadline exceeded как в 10:11:52 и 11:19:37.
+// Общий таймаут = timeoutSec + 90с на каждую попытку (запас на reload+навигацию waybill+GetResponseBody).
+// Запас увеличен с 30с до 90с: SPA Контур.Логистики медленный, при 60с бюджете раз в 3-4 дня
+// возникал "context cancelled: context deadline exceeded" (медленный SPA, а не мёртвый браузер).
+// Ретрай на свежем контексте иначе вторая попытка ловит deadline exceeded как в 10:11:52 и 11:19:37.
 func FetchNotesAPI(ctx context.Context, cs *captureState, timeoutSec int) ([]DeliveryNote, error) {
 	withTimeout := func(parent context.Context) (context.Context, context.CancelFunc) {
-		return context.WithTimeout(parent, time.Duration(timeoutSec+30)*time.Second)
+		return context.WithTimeout(parent, time.Duration(timeoutSec+90)*time.Second)
 	}
 
 	outerCtx, outerCancel := withTimeout(ctx)
