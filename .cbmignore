@@ -1,0 +1,14 @@
+.git/
+node_modules/
+dist/
+build/
+coverage/
+tmp/
+.cache/
+vendor/
+*.log
+
+.env
+.env.*
+*.pem
+*.key
