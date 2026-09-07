@@ -125,6 +125,15 @@ function splitDT(s) {
   const [d, t] = s.split(' ')
   return { d: d || s, t: t || '' }
 }
+// API может прислать driver с лишним префиксом «Водитель» — убираем ведущий токен
+function driverName(v) {
+  if (!v) return v
+  const parts = String(v).trim().split(/\s+/)
+  if (parts.length > 1 && parts[0].toLowerCase() === 'водитель') {
+    return parts.slice(1).join(' ')
+  }
+  return String(v).trim()
+}
 const tickerProgress = computed(() => {
   now.value
   const t = status.value?.lastFetchTime
@@ -311,21 +320,28 @@ function formatSec(sec) {
 
               <!-- Route -->
               <td class="scr-td scr-td--route">
-                <div class="scr-route-driver">
-                  <template v-if="n.driver || n.truck">
-                    <span v-if="n.driver">{{ n.driver }}</span>
-                    <span v-if="n.driver && n.truck" class="scr-separator">·</span>
-                    <span v-if="n.truck" class="font-mono">{{ n.truck }}</span>
-                  </template>
-                  <span v-else class="scr-dash">—</span>
+                <div class="scr-route-field">
+                  <span class="scr-meta-label">Водитель</span>
+                  <div class="scr-route-driver">
+                    <template v-if="n.driver || n.truck">
+                      <span v-if="n.driver">{{ driverName(n.driver) }}</span>
+                      <span v-if="n.driver && n.truck" class="scr-separator">·</span>
+                      <span v-if="n.truck" class="font-mono">{{ n.truck }}</span>
+                    </template>
+                    <span v-else class="scr-dash">—</span>
+                  </div>
                 </div>
-                <div class="scr-route-address">
+                <div class="scr-route-field">
                   <span class="scr-meta-label">Приём:</span>
-                  <strong :class="n.receptionAddress ? '' : 'scr-dash'">{{ n.receptionAddress || '—' }}</strong>
+                  <div class="scr-route-address">
+                    <strong :class="n.receptionAddress ? '' : 'scr-dash'">{{ n.receptionAddress || '—' }}</strong>
+                  </div>
                 </div>
-                <div class="scr-route-address">
+                <div class="scr-route-field">
                   <span class="scr-meta-label">Доставка:</span>
-                  <strong :class="n.deliveryAddress ? '' : 'scr-dash'">{{ n.deliveryAddress || '—' }}</strong>
+                  <div class="scr-route-address">
+                    <strong :class="n.deliveryAddress ? '' : 'scr-dash'">{{ n.deliveryAddress || '—' }}</strong>
+                  </div>
                 </div>
               </td>
 
@@ -339,11 +355,11 @@ function formatSec(sec) {
                   <span
                     v-else-if="n.status === 'failed'"
                     class="scr-badge scr-badge--failed"
-                  >ошибка</span>
+                  >Err</span>
                   <span
                     v-else
                     class="scr-badge scr-badge--pending"
-                  >{{ n.status }}</span>
+                  >{{ n.status === 'in_progress' ? 'Idle' : n.status }}</span>
                 </template>
                 <span v-if="n.error" class="scr-row-error">{{ n.error }}</span>
                 <span v-if="!n.status && !n.error" class="scr-dash">—</span>
@@ -1022,6 +1038,20 @@ html:not(.dark) .scr-error-banner {
 }
 
 /* Route */
+.scr-route-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.scr-route-field + .scr-route-field {
+  margin-top: 0.3rem;
+}
+.scr-route-field .scr-meta-label {
+  font-size: 0.55rem;
+  font-variant: small-caps;
+  text-transform: none;
+  color: var(--m3-outline);
+}
 .scr-route-driver {
   font-size: 0.7rem;
   color: var(--m3-onSurfaceVar);
@@ -1478,6 +1508,14 @@ html:not(.dark) .scr-row--error td:first-child {
   .scr-main {
     padding: 0.75rem 1rem 1.5rem;
   }
+  /* Mobile: Маршрут — самая широкая колонка, две колонки справа сжаты */
+  .scr-table {
+    table-layout: fixed;
+  }
+  .scr-col-number { width: 22%; }
+  .scr-col-route { width: 46%; }
+  .scr-col-status { width: 19%; }
+  .scr-col-pic { width: 13%; }
   .scr-status-bar__content {
     display: flex !important;
     justify-content: space-between;

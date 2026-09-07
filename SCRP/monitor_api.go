@@ -572,12 +572,14 @@ func driverFullName(d apiDriver) string {
 	parts := []string{d.LastName, d.FirstName, d.MiddleName}
 	name := ""
 	for _, p := range parts {
-		if p != "" {
-			if name != "" {
-				name += " "
-			}
-			name += p
+		p = strings.TrimSpace(p)
+		if p == "" || strings.EqualFold(p, "Водитель") {
+			continue
 		}
+		if name != "" {
+			name += " "
+		}
+		name += p
 	}
 	return name
 }
