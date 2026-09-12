@@ -69,6 +69,22 @@ function signedAt(n) {
   if (n.signedAt?.length) return n.signedAt.join(', ')
   return n.processedAt || '—'
 }
+// За сколько подписано: разница между временем подписания и создания
+function signDelta(n) {
+  const parse = s => {
+    const m = String(s || '').match(/(\d{2}:\d{2}:\d{2})/)
+    return m ? new Date(`1970-01-01T${m[1]}Z`).getTime() : null
+  }
+  const t0 = parse(n.createdAt)
+  const t1 = parse(signedAt(n))
+  if (t0 == null || t1 == null) return '—'
+  let sec = Math.round((t1 - t0) / 1000)
+  if (sec < 0) return '—'
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  return (h ? `${h}ч ` : '') + (m ? `${m}м ` : '') + `${s}с`
+}
 
 // Поисковые подписи статусов: сырое значение + то, что видно в таблице (Sign/ошибка) + естественные русские синонимы
 const STATUS_LABELS = {
@@ -314,6 +330,10 @@ function formatSec(sec) {
                   <span class="scr-meta-item">
                     <span class="scr-meta-label">подп.</span>
                     <span class="scr-meta-value font-mono">{{ splitDT(signedAt(n)).t || '—' }}</span>
+                  </span>
+                  <span class="scr-meta-item scr-meta-item--delta">
+                    <span class="scr-meta-label">за</span>
+                    <span class="scr-meta-value font-mono">{{ signDelta(n) }}</span>
                   </span>
                 </div>
               </td>
@@ -1015,14 +1035,21 @@ html:not(.dark) .scr-error-banner {
 }
 .scr-row-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
 }
 .scr-meta-item {
   display: flex;
-  align-items: baseline;
-  gap: 0.3rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
   font-size: 0.65rem;
+}
+/* Блок созд./подп./за — светлее обычного текста таблицы */
+.scr-row-meta .scr-meta-label,
+.scr-row-meta .scr-meta-value {
+  color: var(--m3-onSurface);
 }
 .scr-meta-label {
   text-transform: uppercase;
@@ -1035,6 +1062,12 @@ html:not(.dark) .scr-error-banner {
   font-size: 0.65rem;
   color: var(--m3-onSurfaceVar);
   word-break: break-all;
+}
+/* Значение "за" (разница времени) — крупнее и ярче остальных меток */
+.scr-meta-item--delta .scr-meta-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--m3-onSurface);
 }
 
 /* Route */
