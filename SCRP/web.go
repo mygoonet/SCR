@@ -183,7 +183,11 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	tickerTime := lastFetchTime
 	notesCopy := append([]DeliveryNote(nil), lastNotes...)
 	fetchErr := lastFetchError
-	fails := append([]string(nil), signingFailures...)
+	fails := make([]string, 0, len(signingFailures))
+	for num, msg := range signingFailures {
+		fails = append(fails, num+" — "+msg)
+	}
+	sort.Strings(fails)
 	lastFetchMu.Unlock()
 
 	resp := map[string]interface{}{
@@ -307,8 +311,11 @@ func handleLegacyHTML(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "<h2>Критические ошибки</h2>")
 	lastFetchMu.Lock()
 	fetchErr := lastFetchError
-	fails := make([]string, len(signingFailures))
-	copy(fails, signingFailures)
+	fails := make([]string, 0, len(signingFailures))
+	for num, msg := range signingFailures {
+		fails = append(fails, num+" — "+msg)
+	}
+	sort.Strings(fails)
 	lastFetchMu.Unlock()
 
 	criticalItems := []string{}

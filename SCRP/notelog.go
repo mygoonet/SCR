@@ -278,3 +278,61 @@ func cleanupScreenshots() {
 		}
 	}
 }
+
+// StaleFailedNotes — номера накладных, у которых note.json со статусом
+// "failed", но которых больше нет в текущем списке: серверный список
+// обновляется с лагом, значит накладные фактически подписаны, а ошибка устарела.
+func StaleFailedNotes(current []DeliveryNote) []string {
+	cur := make(map[string]bool, len(current))
+	for _, n := range current {
+		cur[n.Number] = true
+	}
+
+	entries, err := os.ReadDir(screenshotDir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() || cur[e.Name()] {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(screenshotDir, e.Name(), "note.json"))
+		if err != nil {
+			continue
+		}
+		var nf NoteFileJSON
+		if json.Unmarshal(b, &nf) != nil || nf.Status != "failed" {
+			continue
+		}
+		out = append(out, e.Name())
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ResolveNoteAsSigned — заменяет failed на signed в note.json: накладная
+// ушла из исходного списка, значит подписана. Ложное время в signedAt не
+// добавляем — фронт по fallback покажет время обработки (processedAt).
+func ResolveNoteAsSigned(number string) {
+	path := filepath.Join(screenshotDir, number, "note.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var nf NoteFileJSON
+	if json.Unmarshal(b, &nf) != nil || nf.Status != "failed" {
+		return
+	}
+	nf.Status = "signed"
+	nf.Error = ""
+	nf.UpdatedAt = time.Now().Format(timeLayout)
+	data, err := json.MarshalIndent(nf, "", "  ")
+	if err != nil {
+		log.Printf("ResolveNoteAsSigned %s: marshal: %v", number, err)
+		return
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		log.Printf("ResolveNoteAsSigned %s: write: %v", number, err)
+	}
+}

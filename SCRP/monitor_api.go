@@ -234,11 +234,13 @@ func (cs *captureState) snapshotURLs() []string {
 
 // lastFetchMu/lastFetchTime/lastNotes — состояние последнего успешного тикера для веб-интерфейса
 var (
-	lastFetchMu     sync.Mutex
-	lastFetchTime   time.Time
-	lastNotes       []DeliveryNote
-	lastFetchError  string
-	signingFailures []string
+	lastFetchMu    sync.Mutex
+	lastFetchTime  time.Time
+	lastNotes      []DeliveryNote
+	lastFetchError string
+	// signingFailures — критические ошибки подписания: number → сообщение.
+	// Тикер чистит запись, когда накладная уходит из списка (подписана).
+	signingFailures = map[string]string{}
 )
 
 // startTransportationsCapture включает fetch-домен и перехватывает в
@@ -704,11 +706,7 @@ func signAllAPI(ctx context.Context, cs *captureState, certUser string, notes []
 				tel.Sendf(">>> Накладная %s не подписана после 3 попыток — не смогу подписать, пропускаю", n.Number)
 			}
 			lastFetchMu.Lock()
-			signingFailures = append(signingFailures, fmt.Sprintf("%s — не подписана после 3 попыток", n.Number))
-			// Не даём слайсу расти бесконечно — держим последние 50.
-			if len(signingFailures) > 50 {
-				signingFailures = signingFailures[len(signingFailures)-50:]
-			}
+			signingFailures[n.Number] = "не подписана после 3 попыток"
 			lastFetchMu.Unlock()
 		} else {
 			nl.SetStatus("signed", "")
@@ -794,6 +792,10 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 	interval := 360 * time.Second
 	autoSign := true
 	giveUp := map[string]bool{}
+	// failedMissingTicks — счётчик подряд идущих тиков, в которых
+	// «failed»-накладная не присутствовала в списке. Требуются 2 тика,
+	// чтобы снять ошибку (защита от мигания списка).
+	failedMissingTicks := map[string]int{}
 
 	fetchFails := 0
 	lastFetchAlert := time.Time{}
@@ -919,6 +921,40 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 
 			if !found {
 				delete(giveUp, num)
+			}
+		}
+
+		// Накладные, которым ранее поставили failed, но которых больше нет
+		// в списке — подписаны (серверный список обновился с лагом).
+		// Для надёжности требуем отсутствия 2 успешных тика подряд;
+		// если накладная снова появилась в списке, счётчик обнуляется.
+		// (ошибки fetch сюда не попадают — выше уже вернулись с return)
+		for _, num := range StaleFailedNotes(notes) {
+			failedMissingTicks[num]++
+			if failedMissingTicks[num] < 2 {
+				log.Printf("MonitorAPI: %s (failed) нет в списке — отсутствие тик %d/2, жду подтверждения", num, failedMissingTicks[num])
+				continue
+			}
+			delete(failedMissingTicks, num)
+			ResolveNoteAsSigned(num)
+
+			lastFetchMu.Lock()
+			_, had := signingFailures[num]
+			delete(signingFailures, num)
+			lastFetchMu.Unlock()
+
+			log.Printf("MonitorAPI: %s 2 тика подряд нет в списке — снимаю ошибку (была в критических: %v)", num, had)
+			if tel != nil {
+				tel.Sendf("✅ Накладная %s ушла из списка — ошибка снята", num)
+			}
+		}
+		inList := make(map[string]bool, len(notes))
+		for _, n := range notes {
+			inList[n.Number] = true
+		}
+		for num := range failedMissingTicks {
+			if inList[num] {
+				delete(failedMissingTicks, num)
 			}
 		}
 
