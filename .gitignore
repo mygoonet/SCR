@@ -14,3 +14,8 @@ SCR.iml
 /scrp
 /.pi/
 /vue-inspect
+/jsondump
+/logindump
+/poadump
+/poaverify
+/.opencode/
