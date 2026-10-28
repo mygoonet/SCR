@@ -775,14 +775,51 @@ func MonitorAPI(browser *Browser, cfg Config, tel *TelegramClient, cmdCh <-chan 
 		return true
 	}
 
-	// Первая сессия
-	if err := startSession(); err != nil {
-		log.Printf("MonitorAPI: init session: %v", err)
-		if tel != nil {
-			tel.Sendf("❌ MonitorAPI: init session: %v", err)
+	// Первая сессия: при недоступности сети/сайта НЕ выходим из MonitorAPI.
+	// Раньше отсюда шёл return: контейнер оставался "Up" с одним лишь
+	// веб-сервером, горутина мониторинга умирала навсегда, и подписание
+	// не возобновлялось до внешнего docker restart. Теперь повтор с
+	// экспоненциальным backoff 1m → 2m → 5m (далее потолочно 5m), пока
+	// сессия не поднимется; в main-цикл попадаем только с живой сессией.
+	startSessionWithRetry := func() {
+		const (
+			initRetryStart  = 1 * time.Minute
+			initRetryMax    = 5 * time.Minute
+			initAlertMinGap = 30 * time.Minute // темп telegram-алертов
+		)
+		backoff := initRetryStart
+		lastAlert := time.Time{}
+		for attempt := 1; ; attempt++ {
+			err := startSession()
+			if err == nil {
+				if attempt > 1 {
+					log.Printf("MonitorAPI: сессия поднялась с %d попытки", attempt)
+					if tel != nil {
+						tel.Sendf("✅ MonitorAPI: сессия поднялась с %d попытки", attempt)
+					}
+				}
+				return
+			}
+			log.Printf("MonitorAPI: init session (попытка %d, повтор через %s): %v", attempt, backoff, err)
+			// Telegram — не чаще одного сообщения раз в initAlertMinGap
+			// (первая попытка всегда отправляется), иначе при сетевом
+			// простое спамит на каждую попытку.
+			if tel != nil && (attempt == 1 || time.Since(lastAlert) > initAlertMinGap) {
+				tel.Sendf("❌ MonitorAPI: init session (попытка %d): %v", attempt, err)
+				lastAlert = time.Now()
+			}
+			time.Sleep(backoff)
+			if backoff < initRetryMax {
+				backoff *= 2
+				if backoff > initRetryMax {
+					backoff = initRetryMax
+				}
+			}
 		}
-		return
 	}
+
+	startSessionWithRetry()
+
 	defer func() {
 		if session != nil {
 			session.Close()
